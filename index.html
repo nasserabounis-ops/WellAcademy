@@ -282,12 +282,13 @@ const minutesFor=(code,n)=>code==='ks'?Math.max(15,Math.round(n*11.25)):Math.max
 const scopeOf=c=>SCOPES.find(s=>s.c===c)||SCOPES[0];
 function parseHash(){const m=/^#t-([a-z]+)-(\d+|all)$/.exec(location.hash);if(!m)return null;const sc=SCOPES.find(s=>s.c===m[1]);if(!sc)return null;
   if(sc.c==='ks')return{code:'ks',n:4};const max=pool(sc.c).length;const n=m[2]==='all'?max:Math.min(+m[2],max);return n>0?{code:sc.c,n}:null}
+const locked=()=>!!((S.sid||S.fixed)&&!S.cap.admin);
 function parseSid(){const m=/^#s-([a-z0-9]{4,12})$/.exec(location.hash);return m?m[1]:null}
 /* ---------- chrome ---------- */
 function drawChrome(){
   const b=$('#brand');b.replaceChildren(logo(46),h('div',{},h('b',{},'Well',h('span',{text:'Academy'})),h('small',{text:'Eng. Nasser Aboyounes  ·  Well Control Assessment'})));
   const nav=$('#nav');nav.replaceChildren();
-  if(S.view!=='quiz'&&!(S.view==='review'&&S.rev&&!S.rev.free)){
+  if(!locked()&&S.view!=='quiz'&&!(S.view==='review'&&S.rev&&!S.rev.free)){
     nav.append(h('button',{class:'btn quiet',onclick:()=>go('home')},'Take a test'));
     if(S.cap.admin){nav.append(h('button',{class:'btn quiet',onclick:()=>go('admin')},'Trainer'));nav.append(h('button',{class:'btn quiet',onclick:()=>go('bank')},'Quiz Bank'));if(FB)nav.append(h('button',{class:'btn quiet',onclick:fbSignOut},'Sign out'))}
     else if(FB)nav.append(h('button',{class:'btn quiet',onclick:()=>go('login')},'Trainer sign-in'));
@@ -307,7 +308,7 @@ function toast(msg){const t=h('div',{class:'toast',role:'status',text:msg});docu
 function toggleFs(){const d=document;try{if(d.fullscreenElement){d.exitFullscreen()}else{const p=d.documentElement.requestFullscreen?d.documentElement.requestFullscreen():null;if(p&&p.catch)p.catch(()=>toast('Full screen is not available in this view.'));else toast('Full screen is not available in this view.')}}catch{toast('Full screen is not available in this view.')}}
 document.addEventListener('fullscreenchange',()=>drawChrome());
 let revId=null,admId=null;
-function go(v){S.view=v;if(v==='bank')loadBank(true).then(()=>{if(S.view==='bank')render()});if(v!=='review')clearInterval(revId);clearInterval(admId);drawChrome();render();window.scrollTo(0,0);if(v==='admin'){loadAdmin();admId=setInterval(()=>{if(S.view==='admin')loadAdmin(true)},30000)}}
+function go(v){if(locked()&&(v==='admin'||v==='bank'||v==='login'))v='home';if(locked()&&v==='review'&&!(S.rev&&!S.rev.free))v='home';S.view=v;if(v==='bank')loadBank(true).then(()=>{if(S.view==='bank')render()});if(v!=='review')clearInterval(revId);clearInterval(admId);drawChrome();render();window.scrollTo(0,0);if(v==='admin'){loadAdmin();admId=setInterval(()=>{if(S.view==='admin')loadAdmin(true)},30000)}}
 function render(){const a=$('#app');a.replaceChildren();({home:viewHome,quiz:viewQuiz,result:viewResult,admin:viewAdmin,review:viewReview,bank:viewBank,login:viewLogin})[S.view](a)}
 /* ---------- capabilities ---------- */
 function localDb(){
@@ -364,6 +365,7 @@ function viewHome(a){
   const draft=lsGet('wa-draft');
   const hero=h('div',{class:'card hero'},h('h1',{text:'Well control assessment'}),
     h('p',{style:'margin-top:8px;font-size:18px;max-width:640px'},'Choose a topic, answer under time, and get a scored report. Pass a complete category or the full exam at '+PASS+'% to earn a certificate. Each test starts with an optional review corner of key points.'),h('div',{class:'chips'},[D.filter(activeQ).length+' questions','8 categories','4 kill sheets','70% pass mark','Review corner and formula sheet'].map(t=>h('span',{class:'chip',text:t}))),h('p',{style:'margin-top:14px;font-size:16px;font-weight:700'},'Developed by '+AUTHOR));
+  if(locked()){hero.replaceChildren(h('h1',{text:'Well control assessment'}),h('p',{style:'margin-top:8px;font-size:18px;max-width:640px'},'Enter your details below and start the exam your trainer has shared with you.'),h('p',{style:'margin-top:14px;font-size:16px;font-weight:700'},'Developed by '+AUTHOR))}
   a.append(hero);
   if(draft&&draft.test&&draft.test.t0+draft.test.limit*1000>Date.now()){
     a.append(h('div',{class:'card notice'},h('p',{},'You have a test in progress ('+scopeOf(draft.test.code).n+').'),
@@ -396,7 +398,7 @@ function viewHome(a){
       a.append(h('div',{class:'card'},h('h2',{text:s.title}),h('p',{style:'margin-top:8px;font-size:19px'},h('b',{text:sc.n}),' · '+(s.code==='ks'?(s.kref||[0,1,2,3]).length+' scenarios':s.n+' questions')+' · '+minutesFor(s.code,s.n)+' minutes'),
         h('p',{class:'muted',style:'margin:6px 0 14px'},(s.review!==false?s.mins+'-minute review corner first (you can skip it). ':'')+(full?'Certificate awarded at '+PASS+'% or above.':'Practice length: report only, no certificate.')+(s.max>0?' Attempts allowed: '+s.max+'.':'')),
         h('ol',{class:'steps'},['Enter your name, company and position above.',(s.review!==false?'Read the review corner of key points and formulas (optional: you can skip it).':'Your trainer has switched the review corner off.'),'Take the exam under the timer.',(full?'Pass at '+PASS+'% or above to receive your certificate.':'You get a scored report with your strengths and gaps.')+' Your results go to your trainer automatically.'].map(t=>h('li',{text:t}))),
-        h('div',{class:'row'},h('button',{class:'btn primary',onclick:()=>start(s.code,s.n)},'Start'),h('button',{class:'btn quiet',onclick:()=>{S.sid=null;S.sess=null;try{history.replaceState(null,'',location.pathname+location.search)}catch{}render()}},'Use a different code'))))}
+        h('div',{class:'row'},h('button',{class:'btn primary',onclick:()=>start(s.code,s.n)},'Start'),(S.cap.admin?h('button',{class:'btn quiet',onclick:()=>{S.sid=null;S.sess=null;try{history.replaceState(null,'',location.pathname+location.search)}catch{}render()}},'Use a different code'):null))))}
   }else if(fx){const sc=scopeOf(fx.code);
     a.append(h('div',{class:'card'},h('h2',{text:'Your test'}),h('p',{style:'margin-top:8px;font-size:19px'},h('b',{text:sc.n}),' · '+(fx.code==='ks'?'4 scenarios':fx.n+' questions')+' · '+minutesFor(fx.code,fx.n)+' minutes'),
       h('p',{class:'muted',style:'margin:6px 0 14px'},'Set by your trainer. '+((fx.code==='ks'||fx.n>=pool(fx.code).length)?'Certificate awarded at '+PASS+'% or above.':'Practice length: report only, no certificate.')),h('button',{class:'btn primary',onclick:()=>start(fx.code,fx.n)},'Start test')));
@@ -944,7 +946,7 @@ function viewResult(a){
   a.append(h('div',{id:'savebox',class:'notice',hidden:true}));
   const acts=h('div',{class:'row'});
   if(run.cert)acts.append(h('button',{class:'btn primary',onclick:()=>getCert(run,prof,'pdf')},'Download certificate (PDF)'),h('button',{class:'btn',onclick:()=>getCert(run,prof,'png')},'Certificate image'));
-  acts.append(h('button',{class:'btn',onclick:()=>dlReport(run,prof)},'Download report (PDF)'),h('button',{class:'btn',onclick:()=>dlRunDocx(run,prof)},'Report (Word)'),h('button',{class:'btn',onclick:()=>dlRunXlsx(run,prof)},'Report (Excel)'),h('button',{class:'btn quiet',onclick:()=>go('home')},'Take another test'));
+  acts.append(h('button',{class:'btn',onclick:()=>dlReport(run,prof)},'Download report (PDF)'),h('button',{class:'btn',onclick:()=>dlRunDocx(run,prof)},'Report (Word)'),h('button',{class:'btn',onclick:()=>dlRunXlsx(run,prof)},'Report (Excel)'),(locked()?null:h('button',{class:'btn quiet',onclick:()=>go('home')},'Take another test')));
   a.append(h('div',{class:'card'},h('h2',{text:'Your documents'}),h('div',{style:'margin-top:12px'},acts),h('div',{id:'dlmsg',class:'muted',style:'margin-top:10px',role:'status'}),run.cert?h('p',{class:'muted',style:'margin-top:10px'},'Certificate ID: ',h('code',{text:run.cert})):(run.pass?h('p',{style:'margin-top:10px'},'You passed this partial test. Certificates are awarded for passing a complete category or the full exam. Choose the "All" option to earn one.'):null)));
   a.append(h('div',{class:'card'},h('h2',{style:'margin-bottom:14px',text:'Results by category'}),catBars(run.cats),h('p',{class:'muted',style:'margin-top:12px;font-size:15px'},'Strong: 80% and above · Developing: 60 to 79% · Gap: below 60%')));
   const weak=Object.entries(run.cats).filter(([,v])=>v[1]>0&&v[0]/v[1]*100<PASS).sort((x,y)=>x[1][0]/x[1][1]-y[1][0]/y[1][1]);
