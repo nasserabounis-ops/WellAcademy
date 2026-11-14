@@ -1,11 +1,9 @@
-/* Paste your Firebase web app configuration here (Firebase console > Project settings > Your apps > Web app > Config).
-   These values are public by design. Replace every YOUR_... value, then commit this file. */
-window.WA_FIREBASE = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.firebasestorage.app",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
-  // siteUrl: "https://nasserabounis-ops.github.io/WellAcademy/"   // optional, used for exam links
+window.WA_FIREBASE={
+  apiKey:"AIzaSyC-F2Bx6vYccSnLay7IR2pdaaVvsGBOjfQ",
+  authDomain:"wellacademy-b5210.firebaseapp.com",
+  projectId:"wellacademy-b5210",
+  storageBucket:"wellacademy-b5210.firebasestorage.app",
+  messagingSenderId:"821625058655",
+  appId:"1:821625058655:web:8eb47457183fe668edb2ea",
+  siteUrl:"https://nasserabounis-ops.github.io/WellAcademy/"
 };
