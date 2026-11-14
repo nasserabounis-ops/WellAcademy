@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // The trainer: signed in with email and password, and this exact email.
+    function isTrainer() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'password'
+        && request.auth.token.email == 'REPLACE_WITH_TRAINER_EMAIL';
+    }
+    function signedIn() { return request.auth != null; }
+    function validDoc() {
+      return request.resource.data.keys().hasOnly(['j', 'u'])
+        && request.resource.data.j is string
+        && request.resource.data.j.size() < 950000;
+    }
+
+    // Each trainee (anonymous device identity) can write and read only their own results.
+    // The trainer can read, change and delete all results.
+    match /attempts/{uid} {
+      allow get: if (signedIn() && request.auth.uid == uid) || isTrainer();
+      allow create, update: if (signedIn() && request.auth.uid == uid && validDoc()) || isTrainer();
+      allow list, delete: if isTrainer();
+    }
+
+    // Exam sessions: a trainee can open one by its code but cannot list them.
+    match /sessions/{id} {
+      allow get: if signedIn();
+      allow list, create, update, delete: if isTrainer();
+    }
+
+    // Kill sheet cases and Quiz Bank edits: everyone signed in can read, only the trainer can change.
+    match /cases/{id} {
+      allow read: if signedIn();
+      allow write: if isTrainer();
+    }
+    match /qbank/{id} {
+      allow read: if signedIn();
+      allow write: if isTrainer();
+    }
+  }
+}
