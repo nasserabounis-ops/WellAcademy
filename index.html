@@ -260,7 +260,7 @@ const KS=[
 ];
 function ksTol(f,key){const t=f[3];if(t!=null)return t;const pct=(f[0]==='icp'||f[0]==='fcp'||f[0]==='strokes')?0.02:0.03;return Math.max(10,key*pct)}
 function ksOk(f,key,v){return v!=null&&isFinite(v)&&Math.abs(v-key)<=ksTol(f,key)+1e-9}
-const SCOPES=[{c:'all',n:'Full Exam',d:'A random mix from every category'}]
+const SCOPES=[{c:'all',n:'Full Exam',d:'90 questions drawn across all 8 categories, 2 h 30 min, certificate at 70%'}]
  .concat(Object.entries(CATS).map(([k,v])=>({c:k.toLowerCase(),n:v[0],d:v[1]})))
  .concat([{c:'ks',n:'Kill Sheet Scenarios',d:'Kill sheet calculations with typed answers: the four standard cases and your own'}]);
 const $=(s,r=document)=>r.querySelector(s);
@@ -278,10 +278,13 @@ const pctCls=p=>p>=PASS?'hi':p>=50?'mid':'low';
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 const FIXED_RX=/(all|any|both|none|neither)\s+(of\s+)?the\s+above|all the above|\b[a-d]\s+(and|&)\s+[a-d]\b/i;
 function pool(code){return D.filter(q=>!q.hold&&!q.del&&(code==='all'||q.c===code.toUpperCase()))}
-const minutesFor=(code,n)=>code==='ks'?Math.max(15,Math.round(n*11.25)):Math.max(5,Math.ceil(n*1.2));
+const FULLN=90,FULLMIN=150;
+const fullN=c=>c==='all'?Math.min(FULLN,pool('all').length):pool(c).length;
+function strat(code,n){const P=pool(code);if(code!=='all')return shuffle(P).slice(0,n);const by={};P.forEach(q=>(by[q.c]=by[q.c]||[]).push(q));const al=Object.keys(by).map(k=>({k,x:by[k].length/P.length*n}));al.forEach(a=>{a.n=Math.min(by[a.k].length,Math.max(1,Math.floor(a.x)))});let sum=al.reduce((t,a)=>t+a.n,0),g=0;al.sort((a,b)=>(b.x-Math.floor(b.x))-(a.x-Math.floor(a.x)));while(sum<n&&g++<500){const a=al[(g-1)%al.length];if(a.n<by[a.k].length){a.n++;sum++}}g=0;while(sum>n&&g++<500){const a=al.slice().sort((x,y)=>y.n-x.n)[0];if(a.n>1){a.n--;sum--}else break}return shuffle(al.flatMap(a=>shuffle(by[a.k]).slice(0,a.n)))}
+const minutesFor=(code,n)=>code==='all'&&n===FULLN?FULLMIN:code==='ks'?Math.max(15,Math.round(n*11.25)):Math.max(5,Math.ceil(n*1.2));
 const scopeOf=c=>SCOPES.find(s=>s.c===c)||SCOPES[0];
 function parseHash(){const m=/^#t-([a-z]+)-(\d+|all)$/.exec(location.hash);if(!m)return null;const sc=SCOPES.find(s=>s.c===m[1]);if(!sc)return null;
-  if(sc.c==='ks')return{code:'ks',n:4};const max=pool(sc.c).length;const n=m[2]==='all'?max:Math.min(+m[2],max);return n>0?{code:sc.c,n}:null}
+  if(sc.c==='ks')return{code:'ks',n:4};const max=fullN(sc.c);const n=m[2]==='all'?max:Math.min(+m[2],max);return n>0?{code:sc.c,n}:null}
 const locked=()=>!!((S.sid||S.fixed)&&!S.cap.admin);
 function parseSid(){const m=/^#s-([a-z0-9]{4,12})$/.exec(location.hash);return m?m[1]:null}
 /* ---------- chrome ---------- */
@@ -292,6 +295,10 @@ function drawChrome(){
     nav.append(h('button',{class:'btn quiet',onclick:()=>go('home')},'Take a test'));
     if(S.cap.admin){nav.append(h('button',{class:'btn quiet',onclick:()=>go('admin')},'Trainer'));nav.append(h('button',{class:'btn quiet',onclick:()=>go('bank')},'Quiz Bank'));if(FB)nav.append(h('button',{class:'btn quiet',onclick:fbSignOut},'Sign out'))}
     else if(FB)nav.append(h('button',{class:'btn quiet',onclick:()=>go('login')},'Trainer sign-in'));
+  }
+  if(!locked()&&/^https:/.test(location.protocol)&&!(window.matchMedia&&matchMedia('(display-mode: standalone)').matches)){
+    if(window.__wai)nav.append(h('button',{class:'btn quiet',onclick:async()=>{const e=window.__wai;window.__wai=null;try{e.prompt();await e.userChoice}catch{}drawChrome()}},'Install app'));
+    else if(/iphone|ipad|ipod/i.test(navigator.userAgent))nav.append(h('button',{class:'btn quiet',onclick:()=>toast('In Safari tap Share, then Add to Home Screen.')},'Install app'));
   }
   const dark=curTheme()==='dark';
   nav.append(iconBtn(dark?IC.sun:IC.moon,dark?'Switch to light mode':'Switch to dark mode',()=>setTheme(dark?'light':'dark')));
@@ -394,14 +401,14 @@ function viewHome(a){
     const msg={nodb:'This exam link needs you to be signed in to Claude with contributor access.',missing:'This exam link was not found. Check the link with your trainer.',closed:'This exam is closed. Ask your trainer if it will reopen.',expired:'This exam link has expired. Ask your trainer for a new one.',error:'The exam could not be loaded. Refresh the page and try again.'};
     if(s.st==='loading')a.append(h('div',{class:'card muted'},'Loading your exam…'));
     else if(s.st!=='ok')a.append(h('div',{class:'card notice bad'},msg[s.st]));
-    else{const sc=scopeOf(s.code),full=s.code==='ks'?ksStd4(s.kref||[0,1,2,3]):s.n>=pool(s.code).length;
+    else{const sc=scopeOf(s.code),full=s.code==='ks'?ksStd4(s.kref||[0,1,2,3]):s.n>=fullN(s.code);
       a.append(h('div',{class:'card'},h('h2',{text:s.title}),h('p',{style:'margin-top:8px;font-size:19px'},h('b',{text:sc.n}),' · '+(s.code==='ks'?(s.kref||[0,1,2,3]).length+' scenarios':s.n+' questions')+' · '+minutesFor(s.code,s.n)+' minutes'),
         h('p',{class:'muted',style:'margin:6px 0 14px'},(s.review!==false?s.mins+'-minute review corner first (you can skip it). ':'')+(full?'Certificate awarded at '+PASS+'% or above.':'Practice length: report only, no certificate.')+(s.max>0?' Attempts allowed: '+s.max+'.':'')),
         h('ol',{class:'steps'},['Enter your name, company and position above.',(s.review!==false?'Read the review corner of key points and formulas (optional: you can skip it).':'Your trainer has switched the review corner off.'),'Take the exam under the timer.',(full?'Pass at '+PASS+'% or above to receive your certificate.':'You get a scored report with your strengths and gaps.')+' Your results go to your trainer automatically.'].map(t=>h('li',{text:t}))),
         h('div',{class:'row'},h('button',{class:'btn primary',onclick:()=>start(s.code,s.n)},'Start'),(S.cap.admin?h('button',{class:'btn quiet',onclick:()=>{S.sid=null;S.sess=null;try{history.replaceState(null,'',location.pathname+location.search)}catch{}render()}},'Use a different code'):null))))}
   }else if(fx){const sc=scopeOf(fx.code);
     a.append(h('div',{class:'card'},h('h2',{text:'Your test'}),h('p',{style:'margin-top:8px;font-size:19px'},h('b',{text:sc.n}),' · '+(fx.code==='ks'?'4 scenarios':fx.n+' questions')+' · '+minutesFor(fx.code,fx.n)+' minutes'),
-      h('p',{class:'muted',style:'margin:6px 0 14px'},'Set by your trainer. '+((fx.code==='ks'||fx.n>=pool(fx.code).length)?'Certificate awarded at '+PASS+'% or above.':'Practice length: report only, no certificate.')),h('button',{class:'btn primary',onclick:()=>start(fx.code,fx.n)},'Start test')));
+      h('p',{class:'muted',style:'margin:6px 0 14px'},'Set by your trainer. '+((fx.code==='ks'||fx.n>=fullN(fx.code))?'Certificate awarded at '+PASS+'% or above.':'Practice length: report only, no certificate.')),h('button',{class:'btn primary',onclick:()=>start(fx.code,fx.n)},'Start test')));
   }else{
     const grid=h('div',{class:'grid'});
     const segBox=h('div',{class:'seg'});
@@ -410,14 +417,14 @@ function viewHome(a){
     const revBtn=h('button',{class:'btn',onclick:()=>{S.rev={code:S.pick.code,free:true,back:'home'};go('review')}},'Open review corner');
     const paperBtn=h('button',{class:'btn',onclick:()=>{const code=S.pick.code,n=S.pick.n;dlPaper(getPaper('home',code,n,scopeOf(code).n,'',true,code==='ks'?(S.pick.kref||[0,1,2,3]).slice():null),false)}},'Printable paper (PDF)');
     const draw=()=>{
-      grid.replaceChildren(...SCOPES.map(sc=>{const cnt=sc.c==='ks'?4+(S.lib||[]).length:pool(sc.c).length;
-        return h('button',{class:'scope','aria-pressed':String(S.pick.code===sc.c),onclick:()=>{S.pick.code=sc.c;draw()}},h('i',{class:'badge',text:sc.c==='all'?'ALL':sc.c==='ks'?'KS':sc.c.toUpperCase()}),h('b',{text:sc.n}),h('span',{text:sc.d}),h('span',{style:'color:var(--steel);font-weight:700'},cnt+(sc.c==='ks'?' scenarios':' questions')))}));
+      grid.replaceChildren(...SCOPES.map(sc=>{const cnt=sc.c==='ks'?4+(S.lib||[]).length:sc.c==='all'?fullN('all'):pool(sc.c).length;
+        return h('button',{class:'scope','aria-pressed':String(S.pick.code===sc.c),onclick:()=>{S.pick.code=sc.c;draw()}},h('i',{class:'badge',text:sc.c==='all'?'ALL':sc.c==='ks'?'KS':sc.c.toUpperCase()}),h('b',{text:sc.n}),h('span',{text:sc.d}),h('span',{style:'color:var(--steel);font-weight:700'},sc.c==='all'?cnt+' questions · '+FULLMIN/60+' hours':cnt+(sc.c==='ks'?' scenarios':' questions')))}));
       const code=S.pick.code;segBox.replaceChildren();segTitle.textContent=code==='ks'?'Cases to test':'Number of questions';
       if(code==='ks'){S.pick.kref=S.pick.kref||[0,1,2,3];if(S.lib==null)loadLib().then(()=>{if(S.view==='home'&&S.pick.code==='ks')draw()});segBox.append(h('p',{class:'muted',style:'margin-bottom:10px'},'Choose one or more cases. Each case has 8 calculated answers. The certificate needs all four standard cases.'),caseGrid(S.pick.kref,()=>draw()));S.pick.n=S.pick.kref.length}
-      else{const max=pool(code).length;const opts=[10,20,30,50,100].filter(x=>x<max);opts.push(max);
+      else{const max=fullN(code);const opts=[10,20,30,50,100].filter(x=>x<max);opts.push(max);
         if(!opts.includes(S.pick.n))S.pick.n=opts.includes(20)?20:opts[0];
-        opts.forEach((x,i)=>segBox.append(h('button',{class:'btn','aria-pressed':String(S.pick.n===x),onclick:()=>{S.pick.n=x;draw()}},i===opts.length-1?'All '+x+' (certificate)':String(x))))}
-      const n=S.pick.n;info.textContent=minutesFor(code,n)+' minutes · pass mark '+PASS+'% · '+((code==='ks'?ksStd4(S.pick.kref||[0,1,2,3]):n>=pool(code).length)?'complete test: certificate when you pass':'partial test: report only, no certificate');startBtn.textContent='Start '+scopeOf(code).n;startBtn.disabled=code==='ks'&&!(S.pick.kref||[]).length;
+        opts.forEach((x,i)=>segBox.append(h('button',{class:'btn','aria-pressed':String(S.pick.n===x),onclick:()=>{S.pick.n=x;draw()}},i===opts.length-1?(code==='all'?'Full exam '+x+' (certificate)':'All '+x+' (certificate)'):String(x))))}
+      const n=S.pick.n;info.textContent=minutesFor(code,n)+' minutes · pass mark '+PASS+'% · '+((code==='ks'?ksStd4(S.pick.kref||[0,1,2,3]):n>=fullN(code))?'complete test: certificate when you pass':'partial test: report only, no certificate');startBtn.textContent='Start '+scopeOf(code).n;startBtn.disabled=code==='ks'&&!(S.pick.kref||[]).length;
     };
     draw();
     a.append(h('div',{class:'card'},h('h2',{text:'Choose a topic'}),h('div',{style:'margin-top:14px'},grid)),
@@ -443,7 +450,7 @@ async function start(code,n){
   }
   let items;
   if(code==='ks'){const refs=(sess?(sess.kref||[0,1,2,3]):(S.fixed?[0,1,2,3]:(S.pick.kref||[0,1,2,3]))).filter(r=>ksc(r));items=refs.map(i=>({ks:i}))}
-  else items=shuffle(pool(code)).slice(0,n).map(q=>({n:q.n,perm:FIXED_RX.test(q.o.join(' | '))?q.o.map((_,i)=>i):shuffle(q.o.map((_,i)=>i))}));
+  else items=strat(code,n).map(q=>({n:q.n,perm:FIXED_RX.test(q.o.join(' | '))?q.o.map((_,i)=>i):shuffle(q.o.map((_,i)=>i))}));
   S.pending={code,items,sid:sess?sess.id:null,sname:sess?sess.title:null};
   if(!sess||sess.review!==false){S.rev={code,mins:sess&&sess.mins?sess.mins:5,t0:Date.now(),free:false};go('review')}
   else beginExam();
@@ -903,7 +910,7 @@ function finish(auto){
   }else{
     t.items.forEach(it=>{const q=QBY[it.n],pos=t.ans[it.n],orig=pos==null?-1:it.perm[pos],ok=orig===q.a;total++;(cats[q.c]=cats[q.c]||[0,0])[1]++;if(ok){correct++;cats[q.c][0]++}ans.push([q.n,orig,ok?1:0])});
   }
-  const pct=Math.round(correct/total*1000)/10,pass=pct>=PASS,complete=t.code==='ks'?ksStd4(t.items.map(it=>it.ks)):t.items.length>=pool(t.code).length;
+  const pct=Math.round(correct/total*1000)/10,pass=pct>=PASS,complete=t.code==='ks'?ksStd4(t.items.map(it=>it.ks)):t.items.length>=fullN(t.code);
   const sec=Math.min(t.limit,Math.round((Date.now()-t.t0)/1000));
   const run={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),ts:Date.now(),code:t.code,scope:scopeOf(t.code).n,n:t.items.length,correct,total,pct,pass,complete,sec,auto:!!auto,sid:t.sid||null,sname:t.sname||null,cats,ans};
   if(t.code==='ks'){const kcs=t.items.map(it=>ksc(it.ks)).filter(c=>c&&c.x).map(c=>({id:c.id,t:c.t,inp:c.inp}));if(kcs.length)run.kc=kcs}
@@ -1148,7 +1155,7 @@ async function dlReport(run,prof){
 /* ---------- printable paper and answer key ---------- */
 function paperSpec(code,n,title,ref,refs){
   if(code==='ks'){const rf=(refs||[0,1,2,3]).filter(r=>ksc(r));return{code,n:rf.length,refs:rf,title,ref,items:[],minutes:minutesFor('ks',rf.length)}}
-  const items=shuffle(pool(code)).slice(0,n).map(q=>q.n);
+  const items=strat(code,n).map(q=>q.n);
   return{code,n:items.length,title,ref,items,minutes:minutesFor(code,items.length)};
 }
 async function buildPaper(spec){
@@ -1258,7 +1265,7 @@ async function loadAdmin(silent){
 function allRuns(docs){const r=[];(docs||[]).forEach(d=>(d.runs||[]).forEach(x=>r.push({d,r:x})));return r.sort((a,b)=>b.r.ts-a.r.ts)}
 const rid=()=>(Math.random().toString(36)+'000000').slice(2,8);
 function sessState(s){return s.status==='closed'?'Closed':(s.exp&&Date.now()>s.exp)?'Expired':'Open'}
-function lenOpts(c){if(c==='ks')return[{v:'4',t:'4 scenarios (complete: certificate)'}];const max=pool(c).length;return[10,20,30,50,100].filter(x=>x<max).map(x=>({v:String(x),t:x+' questions (practice, no certificate)'})).concat([{v:String(max),t:'All '+max+' (complete: certificate)'}])}
+function lenOpts(c){if(c==='ks')return[{v:'4',t:'4 scenarios (complete: certificate)'}];const max=fullN(c);return[10,20,30,50,100].filter(x=>x<max).map(x=>({v:String(x),t:x+' questions (practice, no certificate)'})).concat([{v:String(max),t:(c==='all'?'Full exam '+max+' questions, '+FULLMIN/60+' hours':'All '+max)+' (complete: certificate)'}])}
 async function copyText(btn,txt,node){try{await navigator.clipboard.writeText(txt);btn.textContent='Copied'}catch{if(node){const r=document.createRange();r.selectNodeContents(node);const s=getSelection();s.removeAllRanges();s.addRange(r)}btn.textContent='Selected'}setTimeout(()=>btn.textContent=btn.textContent==='Copied'||btn.textContent==='Selected'?(btn.dataset.l||'Copy'):btn.textContent,1500)}
 function missStats(runs){
   const m={};
@@ -1444,7 +1451,7 @@ function sessionsCard(){
 async function createAll(){
   const A=S.admin,F=A.form,m=$('#ssmsg');if(!S.cap.db){m.textContent='Shared storage is not available in this view.';return}
   let made=0;
-  try{for(const sc of SCOPES){const n=sc.c==='ks'?4:pool(sc.c).length;if((A.sess||[]).some(s=>s.code===sc.c&&s.n===n&&s.title===sc.n))continue;
+  try{for(const sc of SCOPES){const n=sc.c==='ks'?4:fullN(sc.c);if((A.sess||[]).some(s=>s.code===sc.c&&s.n===n&&s.title===sc.n))continue;
     const id=rid();const data={title:sc.n,code:sc.c,n,review:F.rev!=='0',mins:F.rev==='0'?5:+F.rev,max:+F.max,exp:F.exp?new Date(F.exp+'T23:59:59').getTime():0,status:'open',created:Date.now()-made};
     await S.cap.db.doc('sessions/'+id).set(data);A.sess=[{id,...data},...(A.sess||[])];made++}}
   catch(e){m.textContent='Stopped after '+made+' ('+((e&&e.code)||'error')+').';return}
@@ -1464,8 +1471,8 @@ async function createSession(){
 }
 function linkCard(){
   const lb=h('div',{class:'card'}),sel=h('select',{id:'lb-scope','aria-label':'Topic'},SCOPES.map(s=>h('option',{value:s.c,text:s.n}))),num=h('select',{id:'lb-n','aria-label':'Questions'}),out=h('code',{id:'lb-out'});
-  const upd=()=>{const c=sel.value;num.replaceChildren();if(c==='ks'){num.append(h('option',{value:'4',text:'4 scenarios'}))}else{const max=pool(c).length;[10,20,30,50,100].filter(x=>x<max).concat([max]).forEach(x=>num.append(h('option',{value:String(x),text:x===max?'All '+x:x+' questions'})))}
-    const v=c==='ks'?'4':num.value;out.textContent='#t-'+c+'-'+(c==='ks'?'4':(v==String(pool(c).length)?'all':v))};
+  const upd=()=>{const c=sel.value;num.replaceChildren();if(c==='ks'){num.append(h('option',{value:'4',text:'4 scenarios'}))}else{const max=fullN(c);[10,20,30,50,100].filter(x=>x<max).concat([max]).forEach(x=>num.append(h('option',{value:String(x),text:x===max?'All '+x:x+' questions'})))}
+    const v=c==='ks'?'4':num.value;out.textContent='#t-'+c+'-'+(c==='ks'?'4':(v==String(fullN(c))?'all':v))};
   sel.addEventListener('change',upd);num.addEventListener('change',upd);
   const cp=h('button',{class:'btn',onclick:()=>copyText(cp,out.textContent,out)},'Copy');
   lb.append(h('h2',{text:'Quick link (no session)'}),h('p',{class:'muted',style:'margin:4px 0 12px'},'A simple topic and length link without open/close control or session grouping. Add it to the end of the shared link.'),
@@ -1811,6 +1818,7 @@ async function dlBankDocx(){
 /* ---------- boot ---------- */
 (function(){
   const p=lsGet('wa-profile');if(p)S.profile={name:p.name||'',company:p.company||'',position:p.position||''};
+  window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();window.__wai=e;try{drawChrome()}catch{}});
   S.fixed=parseHash();S.sid=parseSid();if(S.sid)S.sess={id:S.sid,st:'loading'};
   window.addEventListener('hashchange',async()=>{S.fixed=parseHash();S.sid=parseSid();S.sess=S.sid?{id:S.sid,st:'loading'}:null;if(S.view==='home')render();if(S.sid&&S.cap.ready){await loadSession();if(S.view==='home')render()}});
   try{const th=localStorage.getItem('wa-theme');if(th==='dark'||th==='light')document.documentElement.setAttribute('data-theme',th)}catch{}
