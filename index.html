@@ -299,9 +299,9 @@ function drawChrome(){
   const nav=$('#nav');nav.replaceChildren();
   if(!locked()&&S.view!=='quiz'&&!(S.view==='review'&&S.rev&&!S.rev.free)){
     nav.append(h('button',{class:'btn quiet',onclick:()=>go('home')},'Take a test'));
-    nav.append(h('button',{class:'btn quiet',onclick:()=>go('me')},'My progress'));
+    if(ENABLE_ME)nav.append(h('button',{class:'btn quiet',onclick:()=>go('me')},'My progress'));
     if(S.cap.admin){nav.append(h('button',{class:'btn quiet',onclick:()=>go('admin')},'Trainer'));nav.append(h('button',{class:'btn quiet',onclick:()=>go('bank')},'Quiz Bank'));if(FB)nav.append(h('button',{class:'btn quiet',onclick:fbSignOut},'Sign out'))}
-    else if(FB){const cu=FBX.auth&&FBX.auth.currentUser;if(cu&&!cu.isAnonymous)nav.append(h('button',{class:'btn quiet',onclick:fbSignOut},'Sign out'));else nav.append(h('button',{class:'btn quiet',onclick:()=>go('login')},'Sign in'))}
+    else if(FB){const cu=FBX.auth&&FBX.auth.currentUser;if(cu&&!cu.isAnonymous)nav.append(h('button',{class:'btn quiet',onclick:fbSignOut},'Sign out'));else nav.append(h('button',{class:'btn quiet',onclick:()=>go('login')},'Trainer sign-in'))}
   }
   if(!locked()&&/^https:/.test(location.protocol)&&!(window.matchMedia&&matchMedia('(display-mode: standalone)').matches)){
     if(window.__wai)nav.append(h('button',{class:'btn quiet',onclick:async()=>{const e=window.__wai;window.__wai=null;try{e.prompt();await e.userChoice}catch{}drawChrome()}},'Install app'));
@@ -322,8 +322,8 @@ function toast(msg){const t=h('div',{class:'toast',role:'status',text:msg});docu
 function toggleFs(){const d=document;try{if(d.fullscreenElement){d.exitFullscreen()}else{const p=d.documentElement.requestFullscreen?d.documentElement.requestFullscreen():null;if(p&&p.catch)p.catch(()=>toast('Full screen is not available in this view.'));else toast('Full screen is not available in this view.')}}catch{toast('Full screen is not available in this view.')}}
 document.addEventListener('fullscreenchange',()=>drawChrome());
 let revId=null,admId=null;
-function go(v){if(locked()&&(v==='admin'||v==='bank'||v==='login'||v==='me'||v==='sim'))v='home';if(v!=='sim'&&typeof simStop==='function')simStop();if(v==='me'){S.me={};}if(locked()&&v==='review'&&!(S.rev&&!S.rev.free))v='home';S.view=v;if(v==='bank')loadBank(true).then(()=>{if(S.view==='bank')render()});if(v!=='review')clearInterval(revId);clearInterval(admId);drawChrome();render();window.scrollTo(0,0);if(v==='me')loadMe();if(v==='admin'){loadAdmin();admId=setInterval(()=>{if(S.view==='admin')loadAdmin(true)},30000)}}
-function render(){const a=$('#app');a.replaceChildren();({home:viewHome,quiz:viewQuiz,result:viewResult,admin:viewAdmin,review:viewReview,bank:viewBank,login:viewLogin,me:viewMe,sim:viewSim})[S.view](a)}
+function go(v){if(locked()&&(v==='admin'||v==='bank'||v==='login'||v==='me'))v='home';if(v==='me'&&!ENABLE_ME)v='home';if(v==='me'){S.me={};}if(locked()&&v==='review'&&!(S.rev&&!S.rev.free))v='home';S.view=v;if(v==='bank')loadBank(true).then(()=>{if(S.view==='bank')render()});if(v!=='review')clearInterval(revId);clearInterval(admId);drawChrome();render();window.scrollTo(0,0);if(v==='me')loadMe();if(v==='admin'){loadAdmin();admId=setInterval(()=>{if(S.view==='admin')loadAdmin(true)},30000)}}
+function render(){const a=$('#app');a.replaceChildren();({home:viewHome,quiz:viewQuiz,result:viewResult,admin:viewAdmin,review:viewReview,bank:viewBank,login:viewLogin,me:viewMe})[S.view](a)}
 /* ---------- capabilities ---------- */
 function localDb(){
   const K='wa-localdb';let mem={};const rd=()=>{try{return JSON.parse(localStorage.getItem(K)||'{}')}catch{return mem}},wr=o=>{mem=o;try{localStorage.setItem(K,JSON.stringify(o))}catch{}};
@@ -346,10 +346,10 @@ async function initFirebase(){
 }
 function viewLogin(a){
   const msg=h('div',{class:'notice bad',hidden:true,role:'alert',style:'margin-top:12px'});
-  const em=h('input',{type:'text',id:'lg-em',autocomplete:'username',placeholder:'Email'}),pw=h('input',{type:'password',id:'lg-pw',autocomplete:'current-password',placeholder:'Password'});
+  const em=h('input',{type:'text',id:'lg-em',autocomplete:'username',placeholder:'Trainer email'}),pw=h('input',{type:'password',id:'lg-pw',autocomplete:'current-password',placeholder:'Password'});
   const go1=async()=>{msg.hidden=true;try{const c=await FBX.auth.signInWithEmailAndPassword(em.value.trim(),pw.value);S.cap.uid=c.user.uid;S.cap.canWrite=true;S.cap.admin=await fbProbeAdmin(c.user);if(S.cap.admin){BK.loaded=false;await loadBank(true);go('admin')}else go('me')}catch(e){msg.hidden=false;msg.textContent='Sign-in failed ('+((e&&e.code)||'error')+'). Check the email and password.'}};
   pw.addEventListener('keydown',e=>{if(e.key==='Enter')go1()});
-  a.append(h('div',{class:'card'},h('h2',{text:'Sign in'}),h('p',{class:'muted',style:'margin:4px 0 14px'},'For the trainer, or for trainees who created an account. Trainees do not need an account to take a shared exam.'),
+  a.append(h('div',{class:'card'},h('h2',{text:'Trainer sign-in'}),h('p',{class:'muted',style:'margin:4px 0 14px'},'For the trainer only. Trainees do not need to sign in.'),
     h('div',{class:'fields'},h('div',{},h('label',{for:'lg-em',text:'Email'}),em),h('div',{},h('label',{for:'lg-pw',text:'Password'}),pw)),
     h('div',{class:'row',style:'margin-top:14px'},h('button',{class:'btn primary',onclick:go1},'Sign in'),h('button',{class:'btn quiet',onclick:()=>go('home')},'Cancel')),msg));
 }
@@ -358,6 +358,7 @@ async function fbSignOut(){try{await FBX.auth.signOut();await FBX.auth.signInAno
 CATNAME.SIM='Kill Simulator';
 const dayKey=t=>{const d=new Date(t);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 const firstTs=d=>{const r=(d.runs||[]).map(x=>x.ts);return d.first||(r.length?Math.min(...r):(d.updated||Date.now()))};
+const ENABLE_ME=false; /* trainee accounts, progress and leaderboard: switched off for the public site */
 function platformStats(docs){
   docs=docs||[];const runs=allRuns(docs).map(x=>x.r);
   if(!docs.length&&!runs.length)return null;
@@ -448,8 +449,6 @@ const BADGE_DEF=[
  ['full','90','Full Exam Certified','Pass the 90-question Full Exam',r=>r.some(x=>x.cert&&x.code==='all')],
  ['top','★','Top Score','Score 100% on a test of 10 or more questions',r=>r.some(x=>x.pct===100&&x.total>=10)],
  ['ks','KS','Kill Sheet Pro','Pass the kill sheet scenarios',r=>r.some(x=>x.code==='ks'&&x.pass)],
- ['sim','S','Simulator Operator','Score '+PASS+'% or above in the Kill Simulator',r=>r.some(x=>x.code==='sim'&&x.pass)],
- ['steady','◎','Steady Hands','Score 90% or above in the Kill Simulator',r=>r.some(x=>x.code==='sim'&&x.pct>=90)],
  ['streak','3d','Three Days','Practise on 3 different days',r=>new Set(r.map(x=>dayKey(x.ts))).size>=3],
  ['round','8','Well-Rounded','Reach '+PASS+'% in every category',r=>{const b=catBest(r);return Object.keys(CATS).every(k=>b[k]!=null&&b[k]>=PASS)}]
 ];
@@ -468,7 +467,7 @@ function viewMe(a){
   a.append(h('div',{class:'card'},h('h2',{text:'My progress'}),h('p',{class:'muted',style:'margin-top:4px'},'Your tests, badges and certificates in one place.')));
   if(!S.cap.ready||M.loading||!M.doc){a.append(h('div',{class:'card muted'},M.err||'Loading your progress…'));return}
   const doc=M.doc,runs=doc.runs||[];
-  if(!runs.length){a.append(h('div',{class:'card notice'},'No results yet. Take a test or run the simulator and your progress appears here.',h('div',{class:'row',style:'margin-top:10px'},h('button',{class:'btn primary',onclick:()=>go('home')},'Take a test'),h('button',{class:'btn',onclick:()=>go('sim')},'Kill simulator'))))}
+  if(!runs.length){a.append(h('div',{class:'card notice'},'No results yet. Take a test and your progress appears here.',h('div',{class:'row',style:'margin-top:10px'},h('button',{class:'btn primary',onclick:()=>go('home')},'Take a test'))))}
   else{
     const g=runs.filter(x=>x.code!=='sim'),be=g.length?Math.max(...g.map(x=>x.pct)):0,av=g.length?Math.round(g.reduce((s,x)=>s+x.pct,0)/g.length):0;
     a.append(h('div',{class:'tiles'},...[[runs.length,'Tests taken'],[be+'%','Best score'],[av+'%','Average score'],[runs.filter(x=>x.cert).length,'Certificates'],[BADGE_DEF.filter(b=>b[4](runs)).length+' / '+BADGE_DEF.length,'Badges']].map(([v,l])=>h('div',{class:'tile'},h('b',{text:String(v)}),h('span',{text:l})))));
@@ -523,119 +522,6 @@ function boardCard(doc,runs){
   return c;
 }
 
-/* ---------- well control simulator ---------- */
-const SIM={band:75,speeds:[30,60,120]};
-function simAnnStrokes(i){const oh=Math.max(0,i.md-i.shoe-i.dcL);return(i.dcL*i.anDC+oh*i.anDP+i.shoe*i.anCS)/i.po}
-function simInit(i,speed){
-  const k=ksSolve(i).key,Sb=k.strokes,Sa=Math.round(simAnnStrokes(i)),St=Sb+Sa;
-  const Pcmax=Math.max(1.6*k.maasp,2*i.sicp,1200);
-  return{i,k,Sb,St,Pcmax,speed:speed||60,t:0,rt:0,S:0,f:0,pump:false,c:i.sicp/Pcmax*100,Pc:i.sicp,dpp:i.sidpp,ideal:i.sidpp,err:0,gain:i.gain,extra:0,losses:0,over:false,good:0,tot:0,maxDev:0,done:false,hist:[]};
-}
-function simIdeal(s,S,f){const i=s.i,p=Math.min(S/s.Sb,1);return i.sidpp*(1-p)+i.scr*(1+(s.k.kwm/i.mw-1)*p)*f*f}
-function simPcReq(s,S){const i=s.i,bump=Math.sin(Math.PI*Math.min(S,s.Sb)/s.Sb),up=S<=s.Sb?0:Math.min(1,(S-s.Sb)/(s.St-s.Sb));const v=i.sicp*(1+0.22*bump)-i.sicp*1.0*Math.pow(up,1.15);return Math.max(0,Math.min(v,Math.max(0.92*s.k.maasp,i.sicp)))}
-function simStep(s,dt,inp){
-  if(s.done)return;
-  inp=inp||{};if(inp.pump!=null)s.pump=inp.pump;if(inp.dc)s.c=Math.max(0,Math.min(100,s.c+inp.dc));
-  const sd=dt*s.speed;
-  s.f=s.pump?Math.min(1,s.f+dt/15):Math.max(0,s.f-dt/6);
-  const started=s.S>0||s.pump||s.f>0;
-  if(s.f>0){s.S+=s.f*s.i.spm/60*sd}
-  const req=simPcReq(s,s.S),dist=0.3*s.i.sicp*s.f*Math.max(0,1-s.S/(0.06*s.Sb));
-  const pt=s.Pcmax*s.c/100+dist;s.Pc+=(pt-s.Pc)*(1-Math.exp(-dt/0.8));
-  s.err=s.Pc-req;s.ideal=simIdeal(s,s.S,s.f);
-  s.dpp+=(s.ideal+s.err-s.dpp)*(1-Math.exp(-dt/2.5));
-  if(s.err<-60)s.extra+=(-s.err-60)/300*sd/60*(s.f>0?1:.2);
-  const ov=s.Pc>s.k.maasp;if(ov&&!s.over)s.losses++;s.over=ov;
-  s.gain=s.i.gain+s.extra-(ov?0.6*s.losses:0);
-  s.t+=sd;s.rt+=dt;
-  if(started){const dev=Math.abs(s.dpp-s.ideal);s.tot+=dt;if(dev<=SIM.band)s.good+=dt;if(s.f>0.3&&dev>s.maxDev)s.maxDev=dev}
-  if(s.S>=s.St||s.rt>600)s.done=true;
-  return s;
-}
-function simScore(s){const inb=s.tot>0?s.good/s.tot*100:0;const pen=Math.min(40,s.losses*10)+(s.extra>3?10:0)+(s.S<s.St*0.98?Math.min(40,(1-s.S/s.St)*50):0);return{inband:Math.round(inb),pen:Math.round(pen),score:Math.max(0,Math.min(100,Math.round(inb-pen)))}}
-function dial(label,max,unit){
-  const cx=100,cy=100,r=78,a0=135,span=270,pt=(a,rr)=>[cx+rr*Math.cos(a*Math.PI/180),cy+rr*Math.sin(a*Math.PI/180)];
-  const arc=(a1,a2,rr)=>{const [x1,y1]=pt(a1,rr),[x2,y2]=pt(a2,rr);return 'M'+x1+','+y1+' A'+rr+','+rr+' 0 '+((a2-a1)>180?1:0)+' 1 '+x2+','+y2};
-  let tk='';for(let k=0;k<=10;k++){const a=a0+span*k/10,[x1,y1]=pt(a,r-2),[x2,y2]=pt(a,r-(k%5===0?14:8)),[tx,ty]=pt(a,r-26);tk+='<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="currentColor" stroke-width="'+(k%5===0?2.5:1)+'"/>';if(k%2===0)tk+='<text x="'+tx+'" y="'+(ty+4)+'" font-size="11" text-anchor="middle" fill="currentColor">'+Math.round(max*k/10)+'</text>'}
-  const el=svgEl('<svg viewBox="0 0 200 200" width="100%" style="max-width:230px;color:var(--fg)" role="img" aria-label="'+label+' gauge"><circle cx="100" cy="100" r="96" fill="var(--surface)" stroke="var(--line)" stroke-width="3"/><path d="'+arc(a0,a0+span,r)+'" fill="none" stroke="var(--line)" stroke-width="6"/>'+tk+'<line class="tg" x1="100" y1="100" x2="100" y2="30" stroke="#0d9488" stroke-width="3" stroke-dasharray="4 3" opacity="0"/><line class="nd" x1="100" y1="100" x2="100" y2="28" stroke="var(--accent)" stroke-width="4" stroke-linecap="round"/><circle cx="100" cy="100" r="7" fill="var(--accent)"/><text class="rd" x="100" y="164" text-anchor="middle" font-size="24" font-weight="700" fill="currentColor">0</text><text x="100" y="182" text-anchor="middle" font-size="12" fill="var(--muted)">'+label+' ('+unit+')</text></svg>');
-  const rot=v=>'rotate('+(a0+span*Math.max(0,Math.min(1.05,v/max))-270)+' 100 100)';
-  const nd=el.querySelector('.nd'),tg=el.querySelector('.tg'),rd=el.querySelector('.rd');
-  return{el,set(v,t){nd.setAttribute('transform',rot(v));rd.textContent=String(Math.round(v));if(t!=null){tg.setAttribute('opacity','1');tg.setAttribute('transform',rot(t))}}};
-}
-let simRaf=0;
-function simStop(){if(simRaf){cancelAnimationFrame(simRaf);simRaf=0}document.removeEventListener('keydown',simKey)}
-function simKey(e){const X=S.sim;if(!X||!X.s||X.s.done||S.view!=='sim')return;const m={ArrowUp:-1,ArrowDown:1};
-  if(e.key==='ArrowUp'||e.key==='ArrowDown'||e.key==='w'||e.key==='s'||e.key==='W'||e.key==='S'){e.preventDefault();X.inp.dc=(X.inp.dc||0)+((e.key==='ArrowUp'||/w/i.test(e.key))?-1:1)*(e.shiftKey?1:0.2)}}
-function viewSim(a){
-  simStop();const X=S.sim=S.sim||{};
-  if(X.res){simResult(a);return}
-  if(!X.s){simIntro(a);return}
-  simRun(a);
-}
-function simIntro(a){
-  const X=S.sim,prof=S.profile;X.sc=X.sc||0;X.speed=X.speed||60;
-  a.append(h('div',{class:'card hero'},h('h1',{text:'Kill simulator'}),h('p',{style:'margin-top:8px;font-size:18px;max-width:680px'},'Circulate out a kick with the Wait and Weight method. Bring the pump up to the kill rate while holding casing pressure, then follow the drill pipe pressure schedule from ICP to FCP using the choke. Your score is the share of time you stay within '+SIM.band+' psi of the schedule.'),
-    h('p',{class:'muted',style:'margin-top:10px;font-size:15px'},'Training model: simplified behaviour for practising choke control. It is not a calibrated well model.')));
-  const f=(id,label,ph)=>h('div',{},h('label',{for:id,text:label}),h('input',{type:'text',id,placeholder:ph,value:prof[id.slice(2)],autocomplete:'off',oninput:e=>{prof[id.slice(2)]=e.target.value;lsSet('wa-profile',prof)}}));
-  a.append(h('div',{class:'card'},h('h2',{text:'Your details'}),h('p',{class:'muted',style:'margin:4px 0 14px'},'Shared with your trainer with every result.'),h('div',{class:'fields'},f('f-name','Full name','e.g. Ahmed Hassan'),f('f-company','Company','Company or rig contractor'),f('f-position','Position','e.g. Driller')),h('div',{id:'err',class:'notice bad',hidden:true,style:'margin-top:12px'})));
-  const sc=h('select',{id:'sim-sc','aria-label':'Scenario',onchange:e=>{X.sc=+e.target.value}},[0,1,2,3].map(i=>h('option',{value:i,selected:X.sc===i,text:KS[i].t+' · '+ksSolve(ksInp(i)).key.strokes+' strokes to bit'})));
-  const sp=h('select',{id:'sim-sp','aria-label':'Speed',onchange:e=>{X.speed=+e.target.value}},SIM.speeds.map(v=>h('option',{value:v,selected:X.speed===v,text:v+'x time'+(v===60?' (recommended)':'')})));
-  a.append(h('div',{class:'card'},h('h2',{text:'Scenario'}),h('div',{class:'fields',style:'margin-top:10px'},h('div',{},h('label',{for:'sim-sc',text:'Kick'}),sc),h('div',{},h('label',{for:'sim-sp',text:'Simulation speed'}),sp)),
-    h('ol',{class:'steps',style:'margin-top:14px'},['Shut-in is done: read SIDPP and SICP on the gauges.','Press Start pump. The pump comes up to the kill rate over 15 seconds. Hold casing pressure steady by opening the choke as the pump speeds up.','Then keep drill pipe pressure on the green target as it falls from ICP to FCP. Close the choke to raise pressure, open it to lower it. Gauges respond with a delay.','Never let casing pressure pass MAASP, and avoid letting pressure fall below the target (more influx).'].map(t=>h('li',{text:t}))),
-    h('p',{class:'muted',style:'margin-top:8px'},'Choke keys: Up / Down arrows (fine), hold Shift for coarse.'),
-    h('div',{class:'row',style:'margin-top:14px'},h('button',{class:'btn primary',onclick:()=>{const p=S.profile;if(!(p.name||'').trim()||!(p.company||'').trim()||!(p.position||'').trim()){const e=$('#err');e.hidden=false;e.textContent='Enter your name, company and position to begin.';e.scrollIntoView({block:'center'});return}lsSet('wa-profile',p);X.s=simInit(ksInp(X.sc),X.speed);X.inp={};render()}},'Start simulator'),h('button',{class:'btn quiet',onclick:()=>go('home')},'Back'))));
-}
-function ksInp(i){const c=ksc(i);return c.inp||KSI[i]}
-function simRun(a){
-  const X=S.sim,s=X.s,i=s.i;
-  const dpp=dial('Drill pipe',Math.ceil(Math.max(s.k.icp*1.3,200)/200)*200,'psi'),csg=dial('Casing',Math.ceil(s.Pcmax/200)*200,'psi');
-  const phase=h('div',{class:'notice',role:'status',style:'font-size:17px'});
-  const ro=(id,l)=>h('div',{class:'tile'},h('b',{id,text:'0'}),h('span',{text:l}));
-  const chart=svgEl('<svg viewBox="0 0 640 170" width="100%" style="display:block;background:var(--surface);border:1px solid var(--line);border-radius:12px" role="img" aria-label="Drill pipe pressure versus schedule"><polygon class="bd" fill="#0d9488" opacity=".18" points=""/><polyline class="ti" fill="none" stroke="#0d9488" stroke-width="2" stroke-dasharray="5 4" points=""/><polyline class="ac" fill="none" stroke="var(--accent)" stroke-width="3" points=""/></svg>');
-  const pumpBtn=h('button',{class:'btn primary',id:'sim-pump'},'Start pump');
-  const adj=(d,t)=>h('button',{class:'btn',onclick:()=>{X.inp.dc=(X.inp.dc||0)+d}},t);
-  const ctl=h('div',{class:'card'},h('div',{class:'row'},pumpBtn,h('span',{class:'muted',text:'Choke:'}),adj(-1,'Open  -1'),adj(-0.2,'Open  -0.2'),adj(0.2,'Close  +0.2'),adj(1,'Close  +1'),
-    h('button',{class:'btn quiet',onclick:()=>{s.done=true;X.inp={}}},'Finish now')));
-  pumpBtn.onclick=()=>{X.inp.pump=!s.pump;pumpBtn.textContent=X.inp.pump?'Stop pump':'Start pump'};
-  a.append(h('div',{class:'card'},h('h2',{text:KS[X.sc].t+' · Wait and Weight'}),h('p',{class:'muted',style:'font-size:15px;margin-top:4px'},'KWM '+s.k.kwm+' ppg · ICP '+s.k.icp+' psi · FCP '+s.k.fcp+' psi · MAASP '+s.k.maasp+' psi · '+s.Sb+' strokes to bit')),phase);
-  a.append(h('div',{class:'card'},h('div',{class:'gauges'},dpp.el,csg.el),h('div',{class:'tiles',style:'margin-top:12px'},ro('r-s','Strokes pumped'),ro('r-f','Pump SPM'),ro('r-c','Choke % closed'),ro('r-g','Pit gain (bbl)'),ro('r-t','Time in band'))));
-  a.append(h('div',{class:'card'},h('h2',{text:'Drill pipe pressure vs schedule'}),h('div',{style:'margin-top:8px'},chart),h('p',{class:'muted',style:'margin-top:6px;font-size:14px'},'Dashed green: target. Shaded band: plus or minus '+SIM.band+' psi. Orange: your drill pipe pressure.')));
-  a.append(ctl);
-  const $s=id=>document.getElementById(id);let last=performance.now(),fr=0;
-  const loop=now=>{
-    if(S.view!=='sim'||S.sim!==X||X.s!==s){return}
-    const dt=Math.min(0.1,(now-last)/1000);last=now;fr++;
-    const inp=X.inp;X.inp={};if(inp.pump==null&&false){}
-    simStep(s,dt,inp);
-    dpp.set(s.dpp,s.ideal);csg.set(s.Pc,null);
-    $s('r-s').textContent=Math.round(s.S).toLocaleString('en-US');$s('r-f').textContent=Math.round(s.f*s.i.spm);$s('r-c').textContent=s.c.toFixed(1);$s('r-g').textContent=s.gain.toFixed(1);$s('r-t').textContent=s.tot>0?Math.round(s.good/s.tot*100)+'%':'-';
-    phase.className='notice'+(s.over?' bad':'');
-    phase.textContent=s.over?'Casing pressure is above MAASP: risk of losses at the shoe. Open the choke.':!s.pump&&s.S===0?'Shut-in. SIDPP '+i.sidpp+' psi, SICP '+i.sicp+' psi. Press Start pump.':s.S<s.Sb?(s.f<1?'Bringing the pump up: hold casing pressure steady.':'Pumping kill mud to the bit: follow the schedule from ICP to FCP.'):'Kill mud past the bit: hold final circulating pressure while the annulus is displaced.';
-    if(fr%3===0){s.hist.push([s.rt,s.dpp,s.ideal]);if(s.hist.length>200)s.hist.shift();const H=s.hist,t0=H[0][0],t1=Math.max(H[H.length-1][0],t0+30),mx=Math.max(s.k.icp*1.25,200);
-      const X_=t=>(10+(t-t0)/(t1-t0)*620).toFixed(1),Y_=v=>(160-Math.max(0,Math.min(mx,v))/mx*150).toFixed(1);
-      chart.querySelector('.ac').setAttribute('points',H.map(p=>X_(p[0])+','+Y_(p[1])).join(' '));chart.querySelector('.ti').setAttribute('points',H.map(p=>X_(p[0])+','+Y_(p[2])).join(' '));
-      chart.querySelector('.bd').setAttribute('points',H.map(p=>X_(p[0])+','+Y_(p[2]+SIM.band)).join(' ')+' '+H.slice().reverse().map(p=>X_(p[0])+','+Y_(p[2]-SIM.band)).join(' '))}
-    if(s.done){simFinish();return}
-    simRaf=requestAnimationFrame(loop);
-  };
-  document.addEventListener('keydown',simKey);simRaf=requestAnimationFrame(loop);
-}
-function simFinish(){
-  simStop();const X=S.sim,s=X.s,r=simScore(s),i=s.i;
-  const run={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),ts:Date.now(),code:'sim',scope:'Kill Simulator',n:1,correct:r.score,total:100,pct:r.score,pass:r.score>=PASS,complete:false,sec:Math.round(s.rt),auto:false,sid:null,sname:null,cats:{SIM:[r.score,100]},ans:[],
-    sim:{sc:KS[X.sc].t,speed:s.speed,inband:r.inband,pen:r.pen,maxDev:Math.round(s.maxDev),losses:s.losses,extra:Math.round(s.extra*10)/10,strokes:Math.round(s.S),of:s.St}};
-  X.res={run,hist:s.hist.slice()};X.s=null;S.save='idle';render();persist(run);
-}
-function simResult(a){
-  const X=S.sim,run=X.res.run,m=run.sim;
-  a.append(h('div',{class:'card hero'},h('h1',{text:run.pass?'Well kill completed':'Needs more practice'}),h('p',{style:'margin-top:8px;font-size:22px'},'Simulator score ',h('b',{text:run.pct+'%'}),'  ·  pass mark '+PASS+'%')));
-  a.append(h('div',{class:'tiles'},...[[m.inband+'%','Time within '+SIM.band+' psi'],[m.maxDev+' psi','Largest deviation'],[m.losses,'Casing over MAASP'],[m.extra+' bbl','Extra influx taken'],[Math.round(m.strokes/m.of*100)+'%','Circulation completed']].map(([v,l])=>h('div',{class:'tile'},h('b',{text:String(v)}),h('span',{text:l})))));
-  const tips=[];if(m.inband<80)tips.push('Make small, patient choke moves, then wait for the drill pipe gauge to respond before adjusting again.');if(m.losses>0)tips.push('Casing pressure went above MAASP. Open the choke sooner when casing pressure rises while the pump is coming up.');if(m.extra>1)tips.push('Drill pipe pressure fell below the schedule, which lets more influx in. Close the choke a little earlier.');if(m.strokes<m.of*0.98)tips.push('The run ended before the kill mud reached surface.');if(!tips.length)tips.push('Steady, accurate choke control. Try another scenario or a higher simulation speed.');
-  a.append(h('div',{class:'card'},h('h2',{text:'Coaching'}),h('ul',{class:'insights',style:'margin-top:8px'},tips.map(t=>h('li',{class:'ok',text:t})))));
-  a.append(h('div',{class:'card'},h('div',{id:'savebox',class:'notice',role:'status'}),h('div',{class:'row',style:'margin-top:12px'},h('button',{class:'btn primary',onclick:()=>{S.sim={sc:X.sc,speed:X.speed};render()}},'Run again'),h('button',{class:'btn',onclick:()=>{S.sim=null;S.me=null;go('me')}},'My progress'),h('button',{class:'btn quiet',onclick:()=>{S.sim=null;go('home')}},'Home'))));
-  refreshSave();
-}
-
 async function fbProbeAdmin(u){if(!u||u.isAnonymous)return false;try{await FBX.fs.collection('sessions').limit(1).get();return true}catch{return false}}
 async function initCaps(){
   if(FB){return initFirebase()}
@@ -664,7 +550,6 @@ function viewHome(a){
     h('p',{style:'margin-top:8px;font-size:18px;max-width:640px'},'Choose a topic, answer under time, and get a scored report. Pass a complete category or the full exam at '+PASS+'% to earn a certificate. Each test starts with an optional review corner of key points.'),h('div',{class:'chips'},[D.filter(activeQ).length+' questions','8 categories','4 kill sheets','70% pass mark','Review corner and formula sheet'].map(t=>h('span',{class:'chip',text:t}))),h('p',{style:'margin-top:14px;font-size:16px;font-weight:700'},'Developed by '+AUTHOR));
   if(locked()){hero.replaceChildren(h('h1',{text:'Well control assessment'}),h('p',{style:'margin-top:8px;font-size:18px;max-width:640px'},'Enter your details below and start the exam your trainer has shared with you.'),h('p',{style:'margin-top:14px;font-size:16px;font-weight:700'},'Developed by '+AUTHOR))}
   a.append(hero);
-  if(!locked()&&!S.sid&&!S.fixed)a.append(h('div',{class:'card'},h('h2',{text:'Practice tools'}),h('div',{class:'row',style:'margin-top:10px'},h('button',{class:'btn primary',onclick:()=>go('sim')},'Kill simulator'),h('button',{class:'btn',onclick:()=>go('me')},'My progress and badges'))));
   if(draft&&draft.test&&draft.test.t0+draft.test.limit*1000>Date.now()){
     a.append(h('div',{class:'card notice'},h('p',{},'You have a test in progress ('+scopeOf(draft.test.code).n+').'),
       h('div',{class:'row',style:'margin-top:10px'},h('button',{class:'btn primary',onclick:()=>{S.profile=draft.profile;S.test=draft.test;go('quiz');tick()}},'Resume test'),
@@ -1725,7 +1610,7 @@ function sessionsCard(){
       const st=sessState(s),link=BASE+'#s-'+s.id,code=h('code',{text:link});
       const cp=h('button',{class:'btn',onclick:()=>copyText(cp,link,code)},'Copy link');
       const cc=h('button',{class:'btn quiet',onclick:()=>copyText(cc,s.id,null)},'Copy code');
-      const inv=h('button',{class:'btn','data-l':'Copy invitation',onclick:()=>copyText(inv,'WellAcademy exam: '+s.title+'\n\nOpen this link (sign in to Claude when asked):\n'+link+'\n\n1. Enter your name, company and position.\n2. Read the review corner of key points and formulas'+(s.review===false?' (switched off for this exam).':' (optional, you may skip it).')+'\n3. Take the exam: '+(s.code==='ks'?(s.kref||[0,1,2,3]).length+' kill sheet case(s)':s.n+' questions')+', '+minutesFor(s.code,s.n)+' minutes, pass mark '+PASS+'%.\n4. Pass a complete exam to receive your certificate. Your results are sent to your trainer.\n\nExam code if asked: '+s.id,null)},'Copy invitation');
+      const inv=h('button',{class:'btn','data-l':'Copy invitation',onclick:()=>copyText(inv,'WellAcademy exam: '+s.title+'\n\nOpen this link'+(FB?'':' (sign in to Claude when asked)')+':\n'+link+'\n\n1. Enter your name, company and position.\n2. Read the review corner of key points and formulas'+(s.review===false?' (switched off for this exam).':' (optional, you may skip it).')+'\n3. Take the exam: '+(s.code==='ks'?(s.kref||[0,1,2,3]).length+' kill sheet case(s)':s.n+' questions')+', '+minutesFor(s.code,s.n)+' minutes, pass mark '+PASS+'%.\n4. Pass a complete exam to receive your certificate. Your results are sent to your trainer.\n\nExam code if asked: '+s.id,null)},'Copy invitation');
       const tog=h('button',{class:s.status==='closed'?'btn':'btn primary',onclick:async()=>{const{id,...rest}=s;const next=s.status==='closed'?'open':'closed';try{await S.cap.db.doc('sessions/'+s.id).set({...rest,status:next});s.status=next;render()}catch{tog.textContent='Failed'}}},s.status==='closed'?'Reopen exam':'Stop exam');
       const del=h('button',{class:'btn quiet',onclick:async()=>{if(!del.dataset.sure){del.dataset.sure='1';del.textContent='Click again to delete';return}try{await S.cap.db.doc('sessions/'+s.id).delete();A.sess=A.sess.filter(x=>x.id!==s.id);if(A.sid===s.id)A.sid='all';render()}catch{del.textContent='Failed'}}},'Delete');
       const spec=()=>getPaper('s-'+s.id,s.code,s.n,s.title,'Exam code '+s.id,false,s.kref);
