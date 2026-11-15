@@ -38,5 +38,13 @@ service cloud.firestore {
       allow read: if signedIn();
       allow write: if isTrainer();
     }
+
+    // Leaderboard (optional, opt-in by each participant): any signed-in user can read;
+    // each participant writes or removes only their own entry.
+    match /board/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == uid && validDoc();
+      allow delete: if (signedIn() && request.auth.uid == uid) || isTrainer();
+    }
   }
 }
