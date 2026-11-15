@@ -137,6 +137,7 @@ input:focus,select:focus{border-color:var(--steel)}
 .bdg.got{opacity:1;filter:none;border-color:var(--accent);background:var(--tint)}
 .bdg i{font-style:normal;font-weight:700;width:46px;height:46px;border-radius:50%;display:grid;place-items:center;background:var(--navy2);color:#fff;font-size:18px}
 .bdg.got i{background:var(--accent);color:var(--accent-fg)}.bdg b{font-size:16px}.bdg span{font-size:13px;color:var(--muted)}
+.grp{border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:var(--surface)}.grp>summary{cursor:pointer;font-size:17px;padding:4px 0}.grp[open]>summary{border-bottom:1px solid var(--line);margin-bottom:6px}
 .tiles{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 .tile{border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--surface);box-shadow:var(--shadow);border-top:4px solid var(--steel)}
 .tile b{display:block;font-size:32px;line-height:1.1;font-variant-numeric:tabular-nums}
@@ -291,7 +292,7 @@ const minutesFor=(code,n)=>code==='all'&&n===FULLN?FULLMIN:code==='ks'?Math.max(
 const scopeOf=c=>SCOPES.find(s=>s.c===c)||SCOPES[0];
 function parseHash(){const m=/^#t-([a-z]+)-(\d+|all)$/.exec(location.hash);if(!m)return null;const sc=SCOPES.find(s=>s.c===m[1]);if(!sc)return null;
   if(sc.c==='ks')return{code:'ks',n:4};const max=fullN(sc.c);const n=m[2]==='all'?max:Math.min(+m[2],max);return n>0?{code:sc.c,n}:null}
-const locked=()=>!!((S.sid||S.fixed)&&!S.cap.admin);
+const locked=()=>!!(S.sid||S.fixed);
 function parseSid(){const m=/^#s-([a-z0-9]{4,12})$/.exec(location.hash);return m?m[1]:null}
 /* ---------- chrome ---------- */
 function drawChrome(){
@@ -303,7 +304,7 @@ function drawChrome(){
     if(S.cap.admin){nav.append(h('button',{class:'btn quiet',onclick:()=>go('admin')},'Trainer'));nav.append(h('button',{class:'btn quiet',onclick:()=>go('bank')},'Quiz Bank'));if(FB)nav.append(h('button',{class:'btn quiet',onclick:fbSignOut},'Sign out'))}
     else if(FB){const cu=FBX.auth&&FBX.auth.currentUser;if(cu&&!cu.isAnonymous)nav.append(h('button',{class:'btn quiet',onclick:fbSignOut},'Sign out'));else nav.append(h('button',{class:'btn quiet',onclick:()=>go('login')},'Trainer sign-in'))}
   }
-  if(!locked()&&/^https:/.test(location.protocol)&&!(window.matchMedia&&matchMedia('(display-mode: standalone)').matches)){
+  if(!locked()&&!CLAUDE&&/^https:/.test(location.protocol)&&!(window.matchMedia&&matchMedia('(display-mode: standalone)').matches)){
     if(window.__wai)nav.append(h('button',{class:'btn quiet',onclick:async()=>{const e=window.__wai;window.__wai=null;try{e.prompt();await e.userChoice}catch{}drawChrome()}},'Install app'));
     else if(/iphone|ipad|ipod/i.test(navigator.userAgent))nav.append(h('button',{class:'btn quiet',onclick:()=>toast('In Safari tap Share, then Add to Home Screen.')},'Install app'));
   }
@@ -323,7 +324,9 @@ function toggleFs(){const d=document;try{if(d.fullscreenElement){d.exitFullscree
 document.addEventListener('fullscreenchange',()=>drawChrome());
 let revId=null,admId=null;
 function go(v){if(locked()&&(v==='admin'||v==='bank'||v==='login'||v==='me'))v='home';if(v==='me'&&!ENABLE_ME)v='home';if(v==='me'){S.me={};}if(locked()&&v==='review'&&!(S.rev&&!S.rev.free))v='home';S.view=v;if(v==='bank')loadBank(true).then(()=>{if(S.view==='bank')render()});if(v!=='review')clearInterval(revId);clearInterval(admId);drawChrome();render();window.scrollTo(0,0);if(v==='me')loadMe();if(v==='admin'){loadAdmin();admId=setInterval(()=>{if(S.view==='admin')loadAdmin(true)},30000)}}
-function render(){const a=$('#app');a.replaceChildren();({home:viewHome,quiz:viewQuiz,result:viewResult,admin:viewAdmin,review:viewReview,bank:viewBank,login:viewLogin,me:viewMe})[S.view](a)}
+const PUBLIC_URL='https://nasserabounis-ops.github.io/WellAcademy/';
+function render(){const a=$('#app');a.replaceChildren();({home:viewHome,quiz:viewQuiz,result:viewResult,admin:viewAdmin,review:viewReview,bank:viewBank,login:viewLogin,me:viewMe})[S.view](a);
+  if(CLAUDE&&(S.view==='home'||S.view==='admin'||S.view==='bank')){const n=h('div',{class:'card notice'},h('b',{text:'This is the Claude-hosted copy. '}),'Claude recognises you as the owner, so everything is open here and there is no trainer sign-in. Use the public site for trainees and for the trainer password: ',h('a',{href:PUBLIC_URL,target:'_blank',rel:'noopener',text:PUBLIC_URL}));a.prepend(n)}}
 /* ---------- capabilities ---------- */
 function localDb(){
   const K='wa-localdb';let mem={};const rd=()=>{try{return JSON.parse(localStorage.getItem(K)||'{}')}catch{return mem}},wr=o=>{mem=o;try{localStorage.setItem(K,JSON.stringify(o))}catch{}};
@@ -522,6 +525,61 @@ function boardCard(doc,runs){
   return c;
 }
 
+
+/* ---------- groups, records, company report ---------- */
+function groupKey(r){return r.sid||'none'}
+function groupName(k,runs){const s=(S.admin.sess||[]).find(x=>x.id===k);if(s)return s.title;if(k==='none')return 'Practice (no exam link)';const r=runs.find(x=>groupKey(x.r)===k);return (r&&r.r.sname)||('Session '+k)}
+function groupRows(runs){const o={};runs.forEach(x=>{const k=groupKey(x.r);(o[k]=o[k]||[]).push(x)});
+  return Object.entries(o).map(([k,rs])=>({key:k,name:groupName(k,runs),people:new Set(rs.map(x=>x.d.id)).size,attempts:rs.length,avg:Math.round(rs.reduce((t,x)=>t+x.r.pct,0)/rs.length),pass:Math.round(rs.filter(x=>x.r.pass).length/rs.length*100),certs:rs.filter(x=>x.r.cert).length,last:Math.max(...rs.map(x=>x.r.ts))})).sort((a,b)=>b.last-a.last)}
+async function withFilter(f,fn){const A=S.admin,old={sid:A.sid,company:A.company,scope:A.scope};Object.assign(A,f);try{return await fn()}finally{Object.assign(A,old)}}
+async function grpReport(kind,f){await withFilter(f,async()=>{const{fd,runs}=adminData();if(!runs.length){dlMsg('No results for that selection.');return}
+  if(kind==='pdf')await dlGroup(fd,runs,catTotals(runs));else if(kind==='docx')await dlGroupDocx();else await dlResultsXlsx()})}
+function recordsCard(fdv){
+  const A=S.admin;A.rv=A.rv||'p';A.gopen=A.gopen||{};
+  const box=h('div',{class:'card'}),body=h('div',{style:'margin-top:12px;display:grid;gap:10px'});
+  const allRunsNow=allRuns(fdv);
+  const csvBtn=h('div',{class:'row'},h('button',{class:'btn',onclick:dlResultsXlsx},'Export Excel'),h('button',{class:'btn',onclick:()=>exportCsv(allRunsNow)},'Export CSV'));
+  const seg=h('div',{class:'row'},h('span',{class:'muted',text:'View:'}),h('button',{class:'btn','aria-pressed':String(A.rv==='p'),onclick:()=>{A.rv='p';render()}},'By participant'),h('button',{class:'btn','aria-pressed':String(A.rv==='a'),onclick:()=>{A.rv='a';render()}},'By attempt'),
+    h('button',{class:'btn quiet',onclick:()=>{groupRows(allRunsNow).forEach(g=>A.gopen[g.key]=true);render()}},'Expand all'),h('button',{class:'btn quiet',onclick:()=>{A.gopen={};render()}},'Collapse all'));
+  const search=h('input',{type:'search',id:'srch',placeholder:'Search name, company or certificate ID',value:A.q,'aria-label':'Search',oninput:e=>{A.q=e.target.value;draw()}});
+  const draw=()=>{
+    const q=A.q.trim().toLowerCase();
+    const match=d=>!q||[d.name,d.company,d.position].join(' ').toLowerCase().includes(q)||(d.runs||[]).some(r=>(r.cert||'').toLowerCase().includes(q));
+    const fdm=fdv.filter(match),gr=groupRows(allRuns(fdm));
+    if(!gr.length){body.replaceChildren(h('p',{class:'muted',text:'No matching records yet.'}));return}
+    body.replaceChildren(...gr.map(g=>{
+      const det=h('details',{class:'grp',open:!!A.gopen[g.key]});
+      det.addEventListener('toggle',()=>{A.gopen[g.key]=det.open});
+      det.append(h('summary',{},h('b',{text:g.name}),h('span',{class:'muted',text:'  ·  '+g.people+' participant'+(g.people>1?'s':'')+'  ·  '+g.attempts+' attempt'+(g.attempts>1?'s':'')+'  ·  average '+g.avg+'%  ·  pass '+g.pass+'%'+(g.certs?'  ·  '+g.certs+' certificate'+(g.certs>1?'s':''):'')})));
+      const rows=fdm.map(d=>({...d,runs:d.runs.filter(r=>groupKey(r)===g.key)})).filter(d=>d.runs.length).sort((x,y)=>y.runs[y.runs.length-1].ts-x.runs[x.runs.length-1].ts);
+      const f={sid:g.key};
+      det.append(h('div',{class:'row',style:'margin:10px 0'},h('button',{class:'btn',onclick:()=>grpReport('pdf',f)},'Group report (PDF)'),h('button',{class:'btn',onclick:()=>grpReport('docx',f)},'Word'),h('button',{class:'btn',onclick:()=>grpReport('xlsx',f)},'Excel')));
+      let t;
+      if(A.rv==='p'){
+        t=h('table',{class:'tbl'},h('tr',{},['Name','Company','Position','Attempts','Best','Last attempt'].map(x=>h('th',{text:x}))));
+        rows.forEach(d=>{const k=d.id+'|'+g.key,tg=()=>{A.open=A.open===k?null:k;draw()};
+          t.append(h('tr',{style:'cursor:pointer',tabindex:'0',onclick:tg,onkeydown:e=>{if(e.key==='Enter')tg()}},h('td',{},h('b',{text:d.name})),h('td',{text:d.company}),h('td',{text:d.position}),h('td',{text:String(d.runs.length)}),h('td',{},h('b',{style:'color:'+(bestOf(d)>=PASS?'var(--ok)':'var(--bad)'),text:bestOf(d)+'%'})),h('td',{text:new Date(d.runs[d.runs.length-1].ts).toLocaleDateString('en-GB')})));
+          if(A.open===k)t.append(h('tr',{},h('td',{colspan:'6',style:'background:var(--tint)'},participant(d))))});
+      }else{
+        t=h('table',{class:'tbl'},h('tr',{},['Date','Name','Company','Assessment','Score','Result','Time','Certificate'].map(x=>h('th',{text:x}))));
+        rows.flatMap(d=>d.runs.map(r=>({d,r}))).sort((x,y)=>y.r.ts-x.r.ts).forEach(({d,r})=>t.append(h('tr',{},h('td',{text:new Date(r.ts).toLocaleString('en-GB',{dateStyle:'short',timeStyle:'short'})}),h('td',{},h('b',{text:d.name})),h('td',{text:d.company}),h('td',{text:r.scope}),h('td',{text:r.pct+'%'}),h('td',{style:'color:'+(r.pass?'var(--ok)':'var(--bad)'),text:r.pass?'Pass':'Not yet'}),h('td',{text:fmtT(r.sec)}),h('td',{},r.cert?h('code',{text:r.cert}):'-'))));
+      }
+      det.append(h('div',{class:'tblwrap'},t));
+      return det}))};
+  box.append(h('div',{class:'row',style:'justify-content:space-between'},h('h2',{text:'Records by group'}),csvBtn),h('p',{class:'muted',style:'margin:4px 0 10px;font-size:15px'},'Each exam session is its own group and groups are never merged. Open a group to see its participants.'),seg,h('div',{style:'margin-top:10px'},search),body);
+  draw();return box;
+}
+function companyReportCard(){
+  const A=S.admin,comps=[...new Set((A.docs||[]).map(d=>(d.company||'-').trim()))].sort();
+  if(!comps.length)return h('div');
+  if(!comps.includes(A.crep))A.crep=comps[0];
+  const sel=h('select',{id:'crep','aria-label':'Company',onchange:e=>{A.crep=e.target.value}},comps.map(c=>h('option',{value:c,selected:A.crep===c,text:c})));
+  const f=()=>({company:A.crep,sid:'all',scope:'all'});
+  return h('div',{class:'card'},h('h2',{text:'Company report (all groups combined)'}),h('p',{class:'muted',style:'margin:4px 0 12px'},'One integrated report for the whole company across all its groups and exams, with a group-by-group breakdown inside.'),
+    h('div',{style:'max-width:320px'},h('label',{for:'crep',text:'Company'}),sel),
+    h('div',{class:'row',style:'margin-top:12px'},h('button',{class:'btn primary',onclick:()=>grpReport('pdf',f())},'Company report (PDF)'),h('button',{class:'btn',onclick:()=>grpReport('docx',f())},'Word'),h('button',{class:'btn',onclick:()=>grpReport('xlsx',f())},'Excel')));
+}
+
 async function fbProbeAdmin(u){if(!u||u.isAnonymous)return false;try{await FBX.fs.collection('sessions').limit(1).get();return true}catch{return false}}
 async function initCaps(){
   if(FB){return initFirebase()}
@@ -581,7 +639,7 @@ function viewHome(a){
       a.append(h('div',{class:'card'},h('h2',{text:s.title}),h('p',{style:'margin-top:8px;font-size:19px'},h('b',{text:sc.n}),' · '+(s.code==='ks'?(s.kref||[0,1,2,3]).length+' scenarios':s.n+' questions')+' · '+minutesFor(s.code,s.n)+' minutes'),
         h('p',{class:'muted',style:'margin:6px 0 14px'},(s.review!==false?s.mins+'-minute review corner first (you can skip it). ':'')+(full?'Certificate awarded at '+PASS+'% or above.':'Practice length: report only, no certificate.')+(s.max>0?' Attempts allowed: '+s.max+'.':'')),
         h('ol',{class:'steps'},['Enter your name, company and position above.',(s.review!==false?'Read the review corner of key points and formulas (optional: you can skip it).':'Your trainer has switched the review corner off.'),'Take the exam under the timer.',(full?'Pass at '+PASS+'% or above to receive your certificate.':'You get a scored report with your strengths and gaps.')+' Your results go to your trainer automatically.'].map(t=>h('li',{text:t}))),
-        h('div',{class:'row'},h('button',{class:'btn primary',onclick:()=>start(s.code,s.n)},'Start'),(S.cap.admin?h('button',{class:'btn quiet',onclick:()=>{S.sid=null;S.sess=null;try{history.replaceState(null,'',location.pathname+location.search)}catch{}render()}},'Use a different code'):null))))}
+        h('div',{class:'row'},h('button',{class:'btn primary',onclick:()=>start(s.code,s.n)},'Start'),null)))}
   }else if(fx){const sc=scopeOf(fx.code);
     a.append(h('div',{class:'card'},h('h2',{text:'Your test'}),h('p',{style:'margin-top:8px;font-size:19px'},h('b',{text:sc.n}),' · '+(fx.code==='ks'?'4 scenarios':fx.n+' questions')+' · '+minutesFor(fx.code,fx.n)+' minutes'),
       h('p',{class:'muted',style:'margin:6px 0 14px'},'Set by your trainer. '+((fx.code==='ks'||fx.n>=fullN(fx.code))?'Certificate awarded at '+PASS+'% or above.':'Practice length: report only, no certificate.')),h('button',{class:'btn primary',onclick:()=>start(fx.code,fx.n)},'Start test')));
@@ -1412,6 +1470,7 @@ async function buildGroup(ctx){
   const bins=new Array(10).fill(0);fd.forEach(d=>{const b=Math.max(...d.runs.map(r=>r.pct));bins[Math.min(9,Math.floor(b/10))]++});
   P.columns(bins,bins.map((_,i)=>i===9?'90+':(i*10)+'-'+(i*10+9)),{colors:bins.map((_,i)=>i>=7?PDFC.ok:i>=6?PDFC.warn:PDFC.bad)});
   const comp=groupBy(fd,d=>(d.company||'-').trim());
+  {const gr=groupRows(runs);if(gr.length>1){P.h2('By group (exam session)');P.table([.4,.15,.15,.15,.15],['Group','People','Attempts','Average','Pass rate'],gr.map(g=>[P.cl(g.name),String(g.people),String(g.attempts),g.avg+'%',g.pass+'%']))}}
   if(Object.keys(comp).length>1){P.h2('By company');P.table([.4,.15,.2,.25],['Company','People','Average best','Pass rate'],Object.entries(comp).map(([c,ds])=>{const bs=ds.map(d=>Math.max(...d.runs.map(r=>r.pct)));return[c,String(ds.length),Math.round(bs.reduce((a,b)=>a+b,0)/bs.length)+'%',Math.round(bs.filter(b=>b>=PASS).length/bs.length*100)+'%']}))}
   const ms=missStats(runs).slice(0,15);
   P.h2('Most-missed questions');
@@ -1557,25 +1616,11 @@ function viewAdmin(a){
   if(Object.keys(comp).length>1){const box=h('div',{style:'display:grid;gap:10px;margin-top:12px'});
     Object.entries(comp).map(([c,ds])=>({c,n:ds.length,p:ds.map(bestOf).reduce((x,y)=>x+y,0)/ds.length})).sort((x,y)=>x.p-y.p).forEach(r=>box.append(h('div',{},h('div',{class:'row',style:'justify-content:space-between'},h('span',{text:r.c+' ('+r.n+')'}),h('b',{text:Math.round(r.p)+'%'})),h('div',{class:'bar',style:'margin-top:4px'},h('i',{class:pctCls(r.p),style:'width:'+r.p+'%'})))));
     a.append(h('div',{class:'card'},h('h2',{text:'Comparison by company'}),h('p',{class:'muted',style:'font-size:15px'},'Average best score per participant.'),box))}
+  {const gr=groupRows(runs);if(gr.length>1)a.append(h('div',{class:'card'},h('h2',{text:'Comparison by group'}),h('p',{class:'muted',style:'font-size:15px'},'Each exam session shown separately: average score and pass rate.'),h('div',{style:'display:grid;gap:10px;margin-top:12px'},gr.map(g=>h('div',{},h('div',{class:'row',style:'justify-content:space-between'},h('span',{text:g.name+' ('+g.people+')'}),h('b',{text:g.avg+'% avg · '+g.pass+'% pass'})),h('div',{class:'bar',style:'margin-top:4px'},h('i',{class:g.avg>=PASS?'hi':g.avg>=50?'mid':'low',style:'width:'+g.avg+'%'})))))))}
   const fdv=A.bin==null?fd:fd.filter(d=>Math.min(9,Math.floor(bestOf(d)/10))===A.bin);
   a.append(heatCard(fdv));
   a.append(missCard(runs));
-  if(!A.present){
-  const box=h('div',{class:'card'});
-  const search=h('input',{type:'search',id:'srch',placeholder:'Search name, company or certificate ID',value:A.q,'aria-label':'Search',oninput:e=>{A.q=e.target.value;drawTbl()}});
-  const tw=h('div',{class:'tblwrap',style:'margin-top:12px'});
-  const csvBtn=h('div',{class:'row'},h('button',{class:'btn',onclick:dlResultsXlsx},'Export Excel'),h('button',{class:'btn',onclick:()=>exportCsv(runs)},'Export CSV'));
-  const drawTbl=()=>{
-    const q=A.q.trim().toLowerCase();
-    const rows=fdv.filter(d=>!q||[d.name,d.company,d.position].join(' ').toLowerCase().includes(q)||(d.runs||[]).some(r=>(r.cert||'').toLowerCase().includes(q))).sort((x,y)=>(y.updated||0)-(x.updated||0));
-    const t=h('table',{class:'tbl'},h('tr',{},['Name','Company','Position','Attempts','Best','Last attempt'].map(x=>h('th',{text:x}))));
-    if(!rows.length)t.append(h('tr',{},h('td',{colspan:'6',class:'muted',text:'No matching participants yet.'})));
-    rows.forEach(d=>{const best=bestOf(d);t.append(h('tr',{style:'cursor:pointer',tabindex:'0',onclick:()=>{A.open=A.open===d.id?null:d.id;drawTbl()},onkeydown:e=>{if(e.key==='Enter'){A.open=A.open===d.id?null:d.id;drawTbl()}}},h('td',{},h('b',{text:d.name})),h('td',{text:d.company}),h('td',{text:d.position}),h('td',{text:String(d.runs.length)}),h('td',{},h('span',{class:'pill '+(best>=PASS?'ok':'bad'),text:best+'%'})),h('td',{text:new Date(d.updated||d.runs[d.runs.length-1].ts).toLocaleDateString('en-GB')})));
-      if(A.open===d.id)t.append(h('tr',{},h('td',{colspan:'6',style:'background:var(--tint)'},participant(d))))});
-    tw.replaceChildren(t)};
-  box.append(h('div',{class:'row',style:'justify-content:space-between'},h('h2',{text:'Participants'}),csvBtn),h('div',{style:'margin-top:10px'},search),tw);
-  a.append(box);drawTbl();
-  }
+  if(!A.present){a.append(recordsCard(fdv));a.append(companyReportCard())}
   }
   if(!A.present){
   const corr=D.filter(q=>q.corr);
@@ -1610,7 +1655,7 @@ function sessionsCard(){
       const st=sessState(s),link=BASE+'#s-'+s.id,code=h('code',{text:link});
       const cp=h('button',{class:'btn',onclick:()=>copyText(cp,link,code)},'Copy link');
       const cc=h('button',{class:'btn quiet',onclick:()=>copyText(cc,s.id,null)},'Copy code');
-      const inv=h('button',{class:'btn','data-l':'Copy invitation',onclick:()=>copyText(inv,'WellAcademy exam: '+s.title+'\n\nOpen this link'+(FB?'':' (sign in to Claude when asked)')+':\n'+link+'\n\n1. Enter your name, company and position.\n2. Read the review corner of key points and formulas'+(s.review===false?' (switched off for this exam).':' (optional, you may skip it).')+'\n3. Take the exam: '+(s.code==='ks'?(s.kref||[0,1,2,3]).length+' kill sheet case(s)':s.n+' questions')+', '+minutesFor(s.code,s.n)+' minutes, pass mark '+PASS+'%.\n4. Pass a complete exam to receive your certificate. Your results are sent to your trainer.\n\nExam code if asked: '+s.id,null)},'Copy invitation');
+      const inv=h('button',{class:'btn','data-l':'Copy invitation',onclick:()=>copyText(inv,'WellAcademy exam: '+s.title+'\n\nOpen this link'+(FB?'':' (sign in to Claude when asked)')+':\n'+link+'\n\n1. Enter your name, company and position.\n2. Read the review corner of key points and formulas'+(s.review===false?' (switched off for this exam).':' (optional, you may skip it).')+'\n3. Take the exam: '+(s.code==='ks'?(s.kref||[0,1,2,3]).length+' kill sheet case(s)':s.n+' questions')+', '+minutesFor(s.code,s.n)+' minutes, pass mark '+PASS+'%.\n4. Pass a complete exam to receive your certificate. Your results are sent to your trainer automatically.',null)},'Copy invitation');
       const tog=h('button',{class:s.status==='closed'?'btn':'btn primary',onclick:async()=>{const{id,...rest}=s;const next=s.status==='closed'?'open':'closed';try{await S.cap.db.doc('sessions/'+s.id).set({...rest,status:next});s.status=next;render()}catch{tog.textContent='Failed'}}},s.status==='closed'?'Reopen exam':'Stop exam');
       const del=h('button',{class:'btn quiet',onclick:async()=>{if(!del.dataset.sure){del.dataset.sure='1';del.textContent='Click again to delete';return}try{await S.cap.db.doc('sessions/'+s.id).delete();A.sess=A.sess.filter(x=>x.id!==s.id);if(A.sid===s.id)A.sid='all';render()}catch{del.textContent='Failed'}}},'Delete');
       const spec=()=>getPaper('s-'+s.id,s.code,s.n,s.title,'Exam code '+s.id,false,s.kref);
@@ -1753,6 +1798,7 @@ async function buildGroupDocx(ctx){
   b+=dH('Score distribution (best attempt per participant)');
   b+=wtblN([bins.map(String)],bins.map((_,i)=>i===9?'90+':(i*10)+'-'+(i*10+9)),new Array(10).fill(964));
   const comp=groupBy(fd,d=>(d.company||'-').trim());
+  {const gr=groupRows(runs);if(gr.length>1){b+=dH('By group (exam session)');b+=wtblN(gr.map(g=>[g.name,g.people,g.attempts,g.avg+'%',g.pass+'%']),['Group','People','Attempts','Average','Pass rate'],[3638,1400,1500,1600,1500])}}
   if(Object.keys(comp).length>1){b+=dH('By company');b+=wtblN(Object.entries(comp).map(([c,ds])=>{const bs=ds.map(bestOf);return[c,ds.length,Math.round(bs.reduce((a,x)=>a+x,0)/bs.length)+'%',Math.round(bs.filter(x=>x>=PASS).length/bs.length*100)+'%']}),['Company','People','Average best','Pass rate'],[4000,1600,2100,1938])}
   b+=dH('Most-missed questions');b+=missDocx(runs,15);
   b+=dH('Participants');
@@ -1811,6 +1857,7 @@ function resultsSheets(ctx){
   const cat=[['Category','Correct','Questions','Score %','Level']].concat(Object.entries(ct).filter(([,v])=>v[1]).sort((a,c)=>a[1][0]/a[1][1]-c[1][0]/c[1][1]).map(([k,v])=>{const p=Math.round(v[0]/v[1]*100);return[CATNAME[k],v[0],v[1],p,level(p)]}));
   const miss=[['Question','Category','Text','Correct answer','Missed','Attempts','% missed','Most chosen wrong answer','Explanation']].concat(missStats(runs).map(m=>{const q=QBY[m.n];return['Q'+q.n,CATNAME[q.c],qPlain(q),'ABCD'[q.a]+') '+q.o[q.a],m.miss,m.tot,Math.round(m.rate*100),wrongText(q,m.w),q.e]}));
   const sh=[{name:'Summary',rows:sum,nohead:false},{name:'Participants',rows:part},{name:'Attempts',rows:att},{name:'Categories',rows:cat},{name:'Most missed',rows:miss}];
+  {const gr=groupRows(runs);if(gr.length>1)sh.splice(1,0,{name:'Groups',rows:[['Group','Participants','Attempts','Average %','Pass rate %','Certificates']].concat(gr.map(g=>[g.name,g.people,g.attempts,g.avg,g.pass,g.certs]))})}
   const ks=ksStats(runs);if(ks.length)sh.push({name:'Kill sheet misses',rows:[['Item','Missed','Attempts','% missed']].concat(ks.map(k=>[k.name,k.miss,k.tot,Math.round(k.miss/k.tot*100)]))});
   return sh;
 }
@@ -1997,7 +2044,8 @@ async function dlBankDocx(){
   const p=lsGet('wa-profile');if(p)S.profile={name:p.name||'',company:p.company||'',position:p.position||''};
   window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();window.__wai=e;try{drawChrome()}catch{}});
   S.fixed=parseHash();S.sid=parseSid();if(S.sid)S.sess={id:S.sid,st:'loading'};
-  window.addEventListener('hashchange',async()=>{S.fixed=parseHash();S.sid=parseSid();S.sess=S.sid?{id:S.sid,st:'loading'}:null;if(S.view==='home')render();if(S.sid&&S.cap.ready){await loadSession();if(S.view==='home')render()}});
+  window.addEventListener('hashchange',async()=>{S.fixed=parseHash();S.sid=parseSid();S.sess=S.sid?{id:S.sid,st:'loading'}:null;if(locked()&&['admin','bank','login','me'].includes(S.view))S.view='home';try{drawChrome()}catch{}
+    if(S.view==='home')render();if(S.sid&&S.cap.ready){await loadSession();if(S.view==='home')render()}});
   try{const th=localStorage.getItem('wa-theme');if(th==='dark'||th==='light')document.documentElement.setAttribute('data-theme',th)}catch{}
   drawChrome();render();initCaps();
 })();
