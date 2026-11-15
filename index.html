@@ -138,6 +138,7 @@ input:focus,select:focus{border-color:var(--steel)}
 .bdg i{font-style:normal;font-weight:700;width:46px;height:46px;border-radius:50%;display:grid;place-items:center;background:var(--navy2);color:#fff;font-size:18px}
 .bdg.got i{background:var(--accent);color:var(--accent-fg)}.bdg b{font-size:16px}.bdg span{font-size:13px;color:var(--muted)}
 .grp{border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:var(--surface)}.grp>summary{cursor:pointer;font-size:17px;padding:4px 0}.grp[open]>summary{border-bottom:1px solid var(--line);margin-bottom:6px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}.tab{border:1.5px solid var(--line);background:var(--surface);color:var(--fg);font:inherit;font-size:16px;padding:9px 18px;border-radius:999px;cursor:pointer;min-height:44px}.tab[aria-selected=true]{background:var(--navy);color:#fff;border-color:var(--navy)}.gchip{display:inline-block;background:var(--tint);border-radius:999px;padding:2px 11px;font-size:14px;margin:2px 0 2px 8px;font-weight:400}.gchip.ok{background:var(--okbg);color:var(--ok)}.gchip.bad{background:var(--badbg);color:var(--bad)}.btn.danger{background:var(--bad);color:#fff;border-color:var(--bad)}
 .tiles{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 .tile{border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--surface);box-shadow:var(--shadow);border-top:4px solid var(--steel)}
 .tile b{display:block;font-size:32px;line-height:1.1;font-variant-numeric:tabular-nums}
@@ -563,6 +564,17 @@ function boardCard(doc,runs){
 
 
 /* ---------- groups, records, company report ---------- */
+async function pruneRuns(pred){
+  const A=S.admin;if(!S.cap.db||!A.docs)return false;
+  try{
+    for(const d of A.docs.slice()){const runs=d.runs||[],keep=runs.filter(r=>!pred(r,d));if(keep.length===runs.length)continue;
+      const ref=S.cap.db.doc('attempts/'+d.id);
+      if(!keep.length)await ref.delete();else{const rest={...d};delete rest.id;rest.runs=keep;await ref.set(rest)}
+      d.runs=keep}
+    A.docs=A.docs.filter(d=>(d.runs||[]).length);toast('Removed.');return true
+  }catch(e){toast('Could not remove ('+((e&&e.code)||'error')+').');return false}
+}
+function sureBtn(label,sureLabel,fn,cls){const b=h('button',{type:'button',class:cls||'btn quiet',onclick:async e=>{e.stopPropagation();if(b.dataset.sure){b.disabled=true;await fn()}else{b.dataset.sure='1';b.textContent=sureLabel;b.classList.add('danger');setTimeout(()=>{if(b.isConnected&&b.dataset.sure&&!b.disabled){delete b.dataset.sure;b.textContent=label;b.classList.remove('danger')}},5000)}}},label);return b}
 function groupKey(r){return r.sid||'none'}
 function groupName(k,runs){const s=(S.admin.sess||[]).find(x=>x.id===k);if(s)return s.title;if(k==='none')return 'Practice (no exam link)';const r=runs.find(x=>groupKey(x.r)===k);return (r&&r.r.sname)||('Session '+k)}
 function groupRows(runs){const o={};runs.forEach(x=>{const k=groupKey(x.r);(o[k]=o[k]||[]).push(x)});
@@ -586,23 +598,23 @@ function recordsCard(fdv){
     body.replaceChildren(...gr.map(g=>{
       const det=h('details',{class:'grp',open:!!A.gopen[g.key]});
       det.addEventListener('toggle',()=>{A.gopen[g.key]=det.open});
-      det.append(h('summary',{},h('b',{text:g.name}),h('span',{class:'muted',text:'  ·  '+g.people+' participant'+(g.people>1?'s':'')+'  ·  '+g.attempts+' attempt'+(g.attempts>1?'s':'')+'  ·  average '+g.avg+'%  ·  pass '+g.pass+'%'+(g.certs?'  ·  '+g.certs+' certificate'+(g.certs>1?'s':''):'')})));
+      det.append(h('summary',{},h('b',{text:g.name}),h('span',{class:'gchip',text:g.people+' participant'+(g.people>1?'s':'')}),h('span',{class:'gchip',text:g.attempts+' attempt'+(g.attempts>1?'s':'')}),h('span',{class:'gchip '+(g.avg>=PASS?'ok':'bad'),text:'average '+g.avg+'%'}),h('span',{class:'gchip '+(g.pass>=50?'ok':'bad'),text:'pass '+g.pass+'%'}),g.certs?h('span',{class:'gchip',text:g.certs+' certificate'+(g.certs>1?'s':'')}):null,h('span',{class:'gchip',text:'last '+new Date(g.last).toLocaleDateString('en-GB')})));
       const rows=fdm.map(d=>({...d,runs:d.runs.filter(r=>groupKey(r)===g.key)})).filter(d=>d.runs.length).sort((x,y)=>y.runs[y.runs.length-1].ts-x.runs[x.runs.length-1].ts);
       const f={sid:g.key};
-      det.append(h('div',{class:'row',style:'margin:10px 0'},h('button',{class:'btn',onclick:()=>grpReport('pdf',f)},'Group report (PDF)'),h('button',{class:'btn',onclick:()=>grpReport('docx',f)},'Word'),h('button',{class:'btn',onclick:()=>grpReport('xlsx',f)},'Excel')));
+      det.append(h('div',{class:'row',style:'margin:10px 0'},h('button',{class:'btn',onclick:()=>grpReport('pdf',f)},'Group report (PDF)'),h('button',{class:'btn',onclick:()=>grpReport('docx',f)},'Word'),h('button',{class:'btn',onclick:()=>grpReport('xlsx',f)},'Excel'),sureBtn('Delete this group\'s records','Click again to delete all '+g.attempts+' records of this group',async()=>{if(await pruneRuns(r=>groupKey(r)===g.key)){A.open=null;delete A.gopen[g.key];render()}})));
       let t;
       if(A.rv==='p'){
-        t=h('table',{class:'tbl'},h('tr',{},['Name','Company','Position','Attempts','Best','Last attempt'].map(x=>h('th',{text:x}))));
+        t=h('table',{class:'tbl'},h('tr',{},['Name','Company','Position','Attempts','Best','Last attempt',''].map(x=>h('th',{text:x}))));
         rows.forEach(d=>{const k=d.id+'|'+g.key,tg=()=>{A.open=A.open===k?null:k;draw()};
-          t.append(h('tr',{style:'cursor:pointer',tabindex:'0',onclick:tg,onkeydown:e=>{if(e.key==='Enter')tg()}},h('td',{},h('b',{text:d.name})),h('td',{text:d.company}),h('td',{text:d.position}),h('td',{text:String(d.runs.length)}),h('td',{},h('b',{style:'color:'+(bestOf(d)>=PASS?'var(--ok)':'var(--bad)'),text:bestOf(d)+'%'})),h('td',{text:new Date(d.runs[d.runs.length-1].ts).toLocaleDateString('en-GB')})));
-          if(A.open===k)t.append(h('tr',{},h('td',{colspan:'6',style:'background:var(--tint)'},participant(d))))});
+          t.append(h('tr',{style:'cursor:pointer',tabindex:'0',onclick:tg,onkeydown:e=>{if(e.key==='Enter')tg()}},h('td',{},h('b',{text:d.name})),h('td',{text:d.company}),h('td',{text:d.position}),h('td',{text:String(d.runs.length)}),h('td',{},h('b',{style:'color:'+(bestOf(d)>=PASS?'var(--ok)':'var(--bad)'),text:bestOf(d)+'%'})),h('td',{text:new Date(d.runs[d.runs.length-1].ts).toLocaleDateString('en-GB')}),h('td',{},sureBtn('Remove','Click again to remove from this group',async()=>{if(await pruneRuns((r,x)=>x.id===d.id&&groupKey(r)===g.key)){A.open=null;render()}}))));
+          if(A.open===k)t.append(h('tr',{},h('td',{colspan:'7',style:'background:var(--tint)'},participant(d))))});
       }else{
-        t=h('table',{class:'tbl'},h('tr',{},['Date','Name','Company','Assessment','Score','Result','Time','Certificate'].map(x=>h('th',{text:x}))));
-        rows.flatMap(d=>d.runs.map(r=>({d,r}))).sort((x,y)=>y.r.ts-x.r.ts).forEach(({d,r})=>t.append(h('tr',{},h('td',{text:new Date(r.ts).toLocaleString('en-GB',{dateStyle:'short',timeStyle:'short'})}),h('td',{},h('b',{text:d.name})),h('td',{text:d.company}),h('td',{text:r.scope}),h('td',{text:r.pct+'%'}),h('td',{style:'color:'+(r.pass?'var(--ok)':'var(--bad)'),text:r.pass?'Pass':'Not yet'}),h('td',{text:fmtT(r.sec)}),h('td',{},r.cert?h('code',{text:r.cert}):'-'))));
+        t=h('table',{class:'tbl'},h('tr',{},['Date','Name','Company','Assessment','Score','Result','Time','Certificate',''].map(x=>h('th',{text:x}))));
+        rows.flatMap(d=>d.runs.map(r=>({d,r}))).sort((x,y)=>y.r.ts-x.r.ts).forEach(({d,r})=>t.append(h('tr',{},h('td',{text:new Date(r.ts).toLocaleString('en-GB',{dateStyle:'short',timeStyle:'short'})}),h('td',{},h('b',{text:d.name})),h('td',{text:d.company}),h('td',{text:r.scope}),h('td',{text:r.pct+'%'}),h('td',{style:'color:'+(r.pass?'var(--ok)':'var(--bad)'),text:r.pass?'Pass':'Not yet'}),h('td',{text:fmtT(r.sec)}),h('td',{},r.cert?h('code',{text:r.cert}):'-'),h('td',{},sureBtn('Remove','Click again',async()=>{if(await pruneRuns(x=>x===r))render()})))));
       }
       det.append(h('div',{class:'tblwrap'},t));
       return det}))};
-  box.append(h('div',{class:'row',style:'justify-content:space-between'},h('h2',{text:'Records by group'}),csvBtn),h('p',{class:'muted',style:'margin:4px 0 10px;font-size:15px'},'Each exam session is its own group and groups are never merged. Open a group to see its participants.'),seg,h('div',{style:'margin-top:10px'},search),body);
+  box.append(h('div',{class:'row',style:'justify-content:space-between'},h('h2',{text:'Records by group'}),csvBtn),h('p',{class:'muted',style:'margin:4px 0 10px;font-size:15px'},'Each exam session is its own group and groups are never merged. Open a group to see its participants. Use Remove to take a participant out of a group, or Delete this group\'s records to clear the whole group.'),seg,h('div',{style:'margin-top:10px'},search),body);
   draw();return box;
 }
 function companyReportCard(){
@@ -1748,10 +1760,13 @@ function viewAdmin(a){
   a.append(h('div',{class:'card'},h('div',{class:'row',style:'justify-content:space-between'},h('div',{},h('h2',{text:A.present?'Group analysis':'Trainer dashboard'}),h('p',{class:'muted',style:'font-size:15px'},'Live: refreshes every 30 seconds while this page is open.')),
     h('div',{class:'row'},h('button',{class:'btn',onclick:()=>{A.present=!A.present;if(A.present&&!document.fullscreenElement)toggleFs();render()}},A.present?'Exit presentation view':'Presentation view'),h('button',{class:'btn',onclick:()=>loadAdmin()},'Refresh'))),
     h('div',{id:'dlmsg',class:'muted',style:'margin-top:8px',role:'status'})));
-  if(!A.present){a.append(sessionsCard());a.append(casesCard());a.append(papersCard());a.append(linkCard())}
+  const T=A.present?'sum':(A.tab||'sum');
+  if(!A.present)a.append(h('div',{class:'tabs',role:'tablist','aria-label':'Dashboard sections'},[['sum','Overview'],['grp','Groups and records'],['qs','Questions'],['set','Sessions and setup']].map(([k,t])=>h('button',{type:'button',role:'tab',class:'tab','aria-selected':String(T===k),onclick:()=>{A.tab=k;render()}},t))));
+  if(T==='set'){a.append(sessionsCard());a.append(casesCard());a.append(papersCard());a.append(linkCard())}
   if(A.err){a.append(h('div',{class:'notice bad'},A.err));return}
   if(!A.docs){a.append(h('div',{class:'card muted'},'Loading results…'));return}
-  a.append(analyticsCard(A.docs));
+  if(T==='set'){a.append(notesCard());return}
+  if(T==='sum')a.append(analyticsCard(A.docs));
   const comps=[...new Set(A.docs.map(d=>(d.company||'-').trim()))].sort();
   const opt=(v,t,cur)=>h('option',{value:v,selected:cur===v,text:t});
   const fbar=h('div',{class:'card'},h('div',{class:'filters'},
@@ -1766,6 +1781,8 @@ function viewAdmin(a){
   a.append(fbar);
   if(!runs.length){a.append(h('div',{class:'card muted'},'No results yet for this view. Results appear here as soon as people submit.'));}
   else{
+  const showSum=T==='sum';
+  if(showSum){
   const ct=catTotals(runs);
   const avg=Math.round(runs.reduce((s,x)=>s+x.r.pct,0)/runs.length),pr=Math.round(runs.filter(x=>x.r.pass).length/runs.length*100);
   const mins=Math.round(runs.reduce((s,x)=>s+x.r.sec,0)/runs.length/60);
@@ -1784,16 +1801,17 @@ function viewAdmin(a){
     Object.entries(comp).map(([c,ds])=>({c,n:ds.length,p:ds.map(bestOf).reduce((x,y)=>x+y,0)/ds.length})).sort((x,y)=>x.p-y.p).forEach(r=>box.append(h('div',{},h('div',{class:'row',style:'justify-content:space-between'},h('span',{text:r.c+' ('+r.n+')'}),h('b',{text:Math.round(r.p)+'%'})),h('div',{class:'bar',style:'margin-top:4px'},h('i',{class:pctCls(r.p),style:'width:'+r.p+'%'})))));
     a.append(h('div',{class:'card'},h('h2',{text:'Comparison by company'}),h('p',{class:'muted',style:'font-size:15px'},'Average best score per participant.'),box))}
   {const gr=groupRows(runs);if(gr.length>1)a.append(h('div',{class:'card'},h('h2',{text:'Comparison by group'}),h('p',{class:'muted',style:'font-size:15px'},'Each exam session shown separately: average score and pass rate.'),h('div',{style:'display:grid;gap:10px;margin-top:12px'},gr.map(g=>h('div',{},h('div',{class:'row',style:'justify-content:space-between'},h('span',{text:g.name+' ('+g.people+')'}),h('b',{text:g.avg+'% avg · '+g.pass+'% pass'})),h('div',{class:'bar',style:'margin-top:4px'},h('i',{class:g.avg>=PASS?'hi':g.avg>=50?'mid':'low',style:'width:'+g.avg+'%'})))))))}
+  }
   const fdv=A.bin==null?fd:fd.filter(d=>Math.min(9,Math.floor(bestOf(d)/10))===A.bin);
-  a.append(heatCard(fdv));
-  a.append(missCard(runs));
-  if(!A.present){a.append(recordsCard(fdv));a.append(companyReportCard())}
+  if(T==='qs'||A.present){a.append(heatCard(fdv));a.append(missCard(runs))}
+  if(T==='grp'&&!A.present){a.append(recordsCard(fdv));a.append(companyReportCard())}
   }
-  if(!A.present){
+
+}
+function notesCard(){
   const corr=D.filter(q=>q.corr);
-  a.append(h('div',{class:'card'},h('h2',{text:'Answer-key notes'}),h('p',{class:'muted',style:'margin:4px 0 12px'},'These three questions had a doubtful key in the source PDF and were corrected. Kill sheet scenario 1 uses 1,374 strokes (the PDF lists 1,887, which matches scenario 4; 1,374 follows from the given capacities).'),
-    corr.map(q=>h('div',{class:'rev'},h('b',{text:'Q'+q.n+'. '}),q.q,h('div',{class:'muted',style:'margin-top:4px'},'Now keyed: '+'abcd'[q.a]+') '+q.o[q.a]),h('div',{},q.e)))));
-  }
+  return h('div',{class:'card'},h('h2',{text:'Answer-key notes'}),h('p',{class:'muted',style:'margin:4px 0 12px'},'These three questions had a doubtful key in the source PDF and were corrected. Kill sheet scenario 1 uses 1,374 strokes (the PDF lists 1,887, which matches scenario 4; 1,374 follows from the given capacities).'),
+    corr.map(q=>h('div',{class:'rev'},h('b',{text:'Q'+q.n+'. '}),q.q,h('div',{class:'muted',style:'margin-top:4px'},'Now keyed: '+'abcd'[q.a]+') '+q.o[q.a]),h('div',{},q.e))));
 }
 function sessionsCard(){
   const A=S.admin,F=A.form,box=h('div',{class:'card'});
@@ -1822,7 +1840,7 @@ function sessionsCard(){
       const st=sessState(s),link=BASE+'#s-'+s.id,code=h('code',{text:link});
       const cp=h('button',{class:'btn',onclick:()=>copyText(cp,link,code)},'Copy link');
       const cc=h('button',{class:'btn quiet',onclick:()=>copyText(cc,s.id,null)},'Copy code');
-      const inv=h('button',{class:'btn','data-l':'Copy invitation',onclick:()=>copyText(inv,'WellAcademy exam: '+s.title+'\n\nOpen this link'+(FB?'':' (sign in to Claude when asked)')+':\n'+link+'\n\n1. Enter your name, company and position.\n2. Read the review corner of key points and formulas'+(s.review===false?' (switched off for this exam).':' (optional, you may skip it).')+'\n3. Take the exam: '+(s.code==='ks'?(s.kref||[0,1,2,3]).length+' kill sheet case(s)':s.n+' questions')+', '+minutesFor(s.code,s.n)+' minutes, pass mark '+PASS+'%.\n4. Pass a complete exam to receive your certificate. Your results are sent to your trainer automatically.',null)},'Copy invitation');
+      const inv=h('button',{class:'btn','data-l':'Copy invitation',onclick:()=>copyText(inv,'WellAcademy | Eng. Nasser Aboyounes\n'+link,null)},'Copy invitation');
       const tog=h('button',{class:s.status==='closed'?'btn':'btn primary',onclick:async()=>{const{id,...rest}=s;const next=s.status==='closed'?'open':'closed';try{await S.cap.db.doc('sessions/'+s.id).set({...rest,status:next});s.status=next;render()}catch{tog.textContent='Failed'}}},s.status==='closed'?'Reopen exam':'Stop exam');
       const del=h('button',{class:'btn quiet',onclick:async()=>{if(!del.dataset.sure){del.dataset.sure='1';del.textContent='Click again to delete';return}try{await S.cap.db.doc('sessions/'+s.id).delete();A.sess=A.sess.filter(x=>x.id!==s.id);if(A.sid===s.id)A.sid='all';render()}catch{del.textContent='Failed'}}},'Delete');
       const spec=()=>getPaper('s-'+s.id,s.code,s.n,s.title,'Exam code '+s.id,false,s.kref);
